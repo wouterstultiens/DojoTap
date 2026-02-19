@@ -7,6 +7,9 @@ node_modules
 
 # Build artifacts
 frontend/dist
+frontend/playwright-report/
+frontend/test-results/
+.artifacts/
 __pycache__/
 *.pyc
 .pytest_cache/

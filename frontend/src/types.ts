@@ -1,5 +1,8 @@
 export type ProgressMap = Record<string, Record<string, unknown>>;
 
+export type CountProfileMode = "increment" | "absolute";
+export type ProfileSource = "builtin" | "custom";
+
 export interface UserInfo {
   display_name: string;
   dojo_cohort: string;
@@ -47,3 +50,28 @@ export interface SubmitProgressResponse {
   upstream_response: unknown;
 }
 
+interface NumericProfileBase {
+  id: string;
+  name: string;
+  source: ProfileSource;
+  values: number[];
+}
+
+export interface CountProfile extends NumericProfileBase {
+  kind: "count";
+  mode: CountProfileMode;
+}
+
+export interface TimerProfile extends NumericProfileBase {
+  kind: "timer";
+}
+
+export interface TaskProfileAssignment {
+  count_profile_id: string;
+  timer_profile_id: string;
+}
+
+export interface ProfileChoice {
+  id: string;
+  label: string;
+}

@@ -8,6 +8,7 @@ defineProps<{
   title: string;
   subtitle: string;
   options: TileOption[];
+  emptyMessage?: string;
 }>();
 
 const emit = defineEmits<{
@@ -26,16 +27,19 @@ const emit = defineEmits<{
       </div>
     </header>
 
-    <div class="tile-grid">
+    <div v-if="options.length > 0" class="tile-grid">
       <button
         v-for="option in options"
         :key="option.value"
         type="button"
         class="input-tile"
+        :data-testid="`${title.toLowerCase()}-tile-${option.value}`"
         @click="emit('select', option.value)"
       >
         {{ option.label }}
       </button>
     </div>
+
+    <p v-else class="empty-state">{{ emptyMessage || "No options available for this setup." }}</p>
   </section>
 </template>

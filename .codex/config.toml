@@ -1,0 +1,28 @@
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+profile = "webapp"
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+  "@playwright/mcp@latest",
+  "--isolated",
+  "--save-trace",
+  "--output-dir",
+  ".artifacts/playwright-mcp",
+  "--browser",
+  "chromium",
+  "--caps",
+  "vision",
+  "--block-service-workers",
+  "--host",
+  "127.0.0.1",
+  "--port",
+  "3000",
+]
+required = true
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+
+[profiles.webapp]
+model_reasoning_effort = "high"

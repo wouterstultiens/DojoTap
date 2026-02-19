@@ -6,16 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e:smoke": "playwright test e2e/smoke.spec.ts",
+    "e2e:headed": "playwright test e2e/smoke.spec.ts --headed",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "^5.7.3",
     "vite": "^6.1.1",
     "vue-tsc": "^2.2.4"
   }
 }
-

@@ -232,14 +232,19 @@ select {
 
 .settings-list {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .settings-task-row {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
-  padding: 0.6rem 0.75rem;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.settings-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -264,6 +269,28 @@ select {
   text-overflow: ellipsis;
 }
 
+.setup-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.setup-field {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.setup-field select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.42rem 0.5rem;
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
 .pin-toggle {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -281,6 +308,50 @@ select {
   background: #fff;
   padding: 0.42rem 0.62rem;
   cursor: pointer;
+}
+
+.profile-builder {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.profile-builder h2 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.profile-builder-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.profile-builder-grid label {
+  display: grid;
+  gap: 0.24rem;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.profile-builder-grid select,
+.profile-builder-grid input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.5rem 0.56rem;
+}
+
+.profile-values-field {
+  grid-column: 1 / -1;
+}
+
+.profile-builder-hint {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
 }
 
 .notice {
@@ -373,5 +444,14 @@ select {
   .toast {
     right: 1.35rem;
     bottom: 1.35rem;
+  }
+
+  .profile-builder-grid {
+    grid-template-columns: 180px 180px 1fr auto;
+    align-items: end;
+  }
+
+  .profile-values-field {
+    grid-column: span 2;
   }
 }

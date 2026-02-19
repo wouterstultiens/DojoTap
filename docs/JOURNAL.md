@@ -1,4 +1,11 @@
 ## [2026-02-19]
+- Done: Added per-task profile system for count and timer tiles with built-in setups (Polgar next 30, Study 1-30, Classical pattern, every-5 timers) and fallback to legacy defaults.
+- Done: Added Settings UI selectors per task plus reusable custom setup creation (manual values input) with localStorage persistence.
+- Done: Added Playwright tooling (`playwright.config.ts`, `e2e/smoke.spec.ts`) and repo-level `.codex/config.toml` for Playwright MCP.
+- Done: Updated README and CONTEXT docs for profile setup behavior and frontend smoke testing commands.
+- Next: Add profile deletion/rename management for custom setups and cover persistence edge cases with frontend unit/e2e assertions.
+
+## [2026-02-19]
 - Done: Refactored frontend into two-tab UX (`Pinned` + `Settings`) with minimalist main screen and no filter clutter on the primary flow.
 - Done: Replaced drawer logging with full-screen staged interaction (task -> count -> time), and added toast status flow (`Processing...` then `Done`).
 - Done: Kept persistence browser-local using `localStorage` for pinned tasks and active tab preference.

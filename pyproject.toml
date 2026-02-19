@@ -1,6 +1,16 @@
 [project]
 name = "dojotap"
 version = "0.1.0"
-description = "Add your description here"
+description = "Tile-first ChessDojo progress logger"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.8",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.7.1",
+    "uvicorn>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]

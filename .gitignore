@@ -1,8 +1,15 @@
 # Secrets
 .env*
+!.env.example
 
 # Dependencies
 node_modules
+
+# Build artifacts
+frontend/dist
+__pycache__/
+*.pyc
+.pytest_cache/
 
 # OS files
 .DS_Store

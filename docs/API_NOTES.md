@@ -47,6 +47,11 @@
 }
 ```
 
+### 4) `GET /user/access/v2`
+- Used to retrieve user-specific custom tasks.
+- DojoTap merges these custom tasks with the standard requirements list for bootstrap and submit lookup.
+- Some custom tasks are timer-only (no count increment); for these, DojoTap submits `previousCount == newCount` with minutes only.
+
 ## Previous Count Resolution Rule
 When posting progress in DojoTap:
 1. Prefer `user.progress[requirementId].counts[dojoCohort]`
@@ -69,4 +74,3 @@ When posting progress in DojoTap:
   - `GET /requirements/ALL_COHORTS?scoreboardOnly=false`
 - Total smoke GET calls: `40`
 - Additional manual endpoint probes and contract checks were performed during implementation.
-

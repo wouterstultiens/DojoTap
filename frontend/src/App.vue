@@ -1,46 +1,40 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
 import { fetchBootstrap, submitProgress } from "./api";
 import {
-  BUILTIN_COUNT_PROFILES,
-  BUILTIN_TIMER_PROFILES,
-  DEFAULT_COUNT_PROFILE_ID,
-  DEFAULT_TIMER_PROFILE_ID,
-  POLGAR_COUNT_PROFILE_ID,
+  COUNT_CAP_OPTIONS,
+  DEFAULT_COUNT_CAP,
+  DEFAULT_COUNT_LABEL_MODE,
+  DEFAULT_TILE_SIZE_MODE,
+  TIMER_OPTIONS,
   formatMinuteLabel,
-  normalizeNumericValues,
 } from "./constants";
 import FilterBar from "./components/FilterBar.vue";
 import TaskTile from "./components/TaskTile.vue";
 import TilePicker from "./components/TilePicker.vue";
 import type {
   BootstrapResponse,
-  CountProfile,
-  CountProfileMode,
-  ProfileChoice,
+  CountLabelMode,
   TaskItem,
-  TaskProfileAssignment,
-  TimerProfile,
+  TaskUiPreferences,
+  TileSizeMode,
 } from "./types";
 
 const PIN_STORAGE_KEY = "dojotap_pinned_tasks_v1";
 const TAB_STORAGE_KEY = "dojotap_active_tab_v1";
-const PROFILE_ASSIGNMENTS_STORAGE_KEY = "dojotap_task_profile_assignments_v1";
-const CUSTOM_PROFILES_STORAGE_KEY = "dojotap_custom_profiles_v1";
-
-const CUSTOM_COUNT_MAX = 5000;
-const CUSTOM_TIMER_MAX = 720;
+const TASK_UI_PREFERENCES_STORAGE_KEY = "dojotap_task_ui_preferences_v1";
+const TASK_COUNT_TEMPLATE_REGEX = /\{\{\s*count\s*\}\}/gi;
 
 type AppTab = "pinned" | "settings";
 type FlowStage = "task" | "count" | "minutes";
 type ToastTone = "info" | "success" | "error";
 
-type ProfileKind = "count" | "timer";
-
-interface StoredCustomProfiles {
-  count: unknown[];
-  timer: unknown[];
+interface LastSubmissionEntry {
+  task_name: string;
+  count_increment: number;
+  minutes_spent: number;
+  logged_at: string;
 }
 
 const bootstrapData = ref<BootstrapResponse | null>(null);
@@ -53,6 +47,7 @@ const cohortFilter = ref("ALL");
 const categoryFilter = ref("ALL");
 const searchFilter = ref("");
 const pinnedOnly = ref(true);
+const hideCompleted = ref(false);
 
 const pinnedTaskIds = ref<Set<string>>(new Set());
 const flowStage = ref<FlowStage>("task");
@@ -62,53 +57,15 @@ const selectedCountLabel = ref("");
 const submitting = ref(false);
 let toastTimer: number | null = null;
 
-const customCountProfiles = ref<CountProfile[]>([]);
-const customTimerProfiles = ref<TimerProfile[]>([]);
-const profileAssignments = ref<Record<string, TaskProfileAssignment>>({});
+const taskUiPreferences = ref<Record<string, TaskUiPreferences>>({});
 
-const newProfileKind = ref<ProfileKind>("count");
-const newProfileName = ref("");
-const newProfileValues = ref("");
-const newCountMode = ref<CountProfileMode>("absolute");
+const lastSubmission = ref<LastSubmissionEntry | null>(null);
 
 const toast = ref<{ message: string; tone: ToastTone; visible: boolean }>({
   message: "",
   tone: "info",
   visible: false,
 });
-
-const allCountProfiles = computed(() => [...BUILTIN_COUNT_PROFILES, ...customCountProfiles.value]);
-const allTimerProfiles = computed(() => [...BUILTIN_TIMER_PROFILES, ...customTimerProfiles.value]);
-
-const countProfileById = computed(() => {
-  const map = new Map<string, CountProfile>();
-  for (const profile of allCountProfiles.value) {
-    map.set(profile.id, profile);
-  }
-  return map;
-});
-
-const timerProfileById = computed(() => {
-  const map = new Map<string, TimerProfile>();
-  for (const profile of allTimerProfiles.value) {
-    map.set(profile.id, profile);
-  }
-  return map;
-});
-
-const countProfileChoices = computed<ProfileChoice[]>(() =>
-  allCountProfiles.value.map((profile) => ({
-    id: profile.id,
-    label: `${profile.name} (${profile.mode})${profile.source === "custom" ? " [custom]" : ""}`,
-  }))
-);
-
-const timerProfileChoices = computed<ProfileChoice[]>(() =>
-  allTimerProfiles.value.map((profile) => ({
-    id: profile.id,
-    label: `${profile.name}${profile.source === "custom" ? " [custom]" : ""}`,
-  }))
-);
 
 function parseJson(raw: string | null): unknown {
   if (!raw) {
@@ -121,138 +78,71 @@ function parseJson(raw: string | null): unknown {
   }
 }
 
-function sanitizeValues(rawValues: unknown, maxValue: number): number[] {
-  if (!Array.isArray(rawValues)) {
-    return [];
+function sanitizeCountLabelMode(raw: unknown): CountLabelMode | null {
+  if (raw === "increment" || raw === "absolute") {
+    return raw;
   }
-
-  const numbers = rawValues
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0 && value <= maxValue);
-
-  return normalizeNumericValues(numbers);
+  return null;
 }
 
-function sanitizeStoredCountProfile(raw: unknown): CountProfile | null {
+function sanitizeTileSizeMode(raw: unknown): TileSizeMode | null {
+  if (raw === "small" || raw === "large") {
+    return raw;
+  }
+  return null;
+}
+
+function sanitizeTaskUiPreferences(raw: unknown): TaskUiPreferences | null {
   if (!raw || typeof raw !== "object") {
     return null;
   }
 
-  const maybe = raw as Partial<CountProfile>;
-  const id = typeof maybe.id === "string" ? maybe.id.trim() : "";
-  const name = typeof maybe.name === "string" ? maybe.name.trim() : "";
-  const mode = maybe.mode === "increment" ? "increment" : maybe.mode === "absolute" ? "absolute" : null;
-  const values = sanitizeValues(maybe.values, CUSTOM_COUNT_MAX);
+  const maybe = raw as Partial<TaskUiPreferences>;
+  const countLabelMode = sanitizeCountLabelMode(maybe.count_label_mode);
+  const tileSizeMode = sanitizeTileSizeMode(maybe.tile_size);
 
-  if (!id || !name || mode === null || values.length === 0) {
+  if (!countLabelMode || !tileSizeMode) {
     return null;
   }
+
+  const countCap = sanitizeCountCap(maybe.count_cap) ?? DEFAULT_COUNT_CAP;
 
   return {
-    id,
-    kind: "count",
-    name,
-    source: "custom",
-    mode,
-    values,
+    count_label_mode: countLabelMode,
+    tile_size: tileSizeMode,
+    count_cap: countCap,
   };
 }
 
-function sanitizeStoredTimerProfile(raw: unknown): TimerProfile | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
+function sanitizeCountCap(raw: unknown): number | null {
+  const asNumber = Number(raw);
+  if (COUNT_CAP_OPTIONS.includes(asNumber)) {
+    return asNumber;
   }
-
-  const maybe = raw as Partial<TimerProfile>;
-  const id = typeof maybe.id === "string" ? maybe.id.trim() : "";
-  const name = typeof maybe.name === "string" ? maybe.name.trim() : "";
-  const values = sanitizeValues(maybe.values, CUSTOM_TIMER_MAX);
-
-  if (!id || !name || values.length === 0) {
-    return null;
-  }
-
-  return {
-    id,
-    kind: "timer",
-    name,
-    source: "custom",
-    values,
-  };
+  return null;
 }
 
-function persistCustomProfiles(): void {
-  const payload = {
-    count: customCountProfiles.value,
-    timer: customTimerProfiles.value,
-  };
-  localStorage.setItem(CUSTOM_PROFILES_STORAGE_KEY, JSON.stringify(payload));
+function persistTaskUiPreferences(): void {
+  localStorage.setItem(TASK_UI_PREFERENCES_STORAGE_KEY, JSON.stringify(taskUiPreferences.value));
 }
 
-function loadCustomProfiles(): void {
-  const parsed = parseJson(localStorage.getItem(CUSTOM_PROFILES_STORAGE_KEY));
+function loadTaskUiPreferences(): void {
+  const parsed = parseJson(localStorage.getItem(TASK_UI_PREFERENCES_STORAGE_KEY));
   if (!parsed || typeof parsed !== "object") {
-    customCountProfiles.value = [];
-    customTimerProfiles.value = [];
+    taskUiPreferences.value = {};
     return;
   }
 
-  const source = parsed as Partial<StoredCustomProfiles>;
-  const countRaw = Array.isArray(source.count) ? source.count : [];
-  const timerRaw = Array.isArray(source.timer) ? source.timer : [];
-
-  customCountProfiles.value = countRaw
-    .map((entry) => sanitizeStoredCountProfile(entry))
-    .filter((entry): entry is CountProfile => entry !== null);
-
-  customTimerProfiles.value = timerRaw
-    .map((entry) => sanitizeStoredTimerProfile(entry))
-    .filter((entry): entry is TimerProfile => entry !== null);
-
-  persistCustomProfiles();
-}
-
-function parseAssignment(raw: unknown): TaskProfileAssignment | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-
-  const candidate = raw as Partial<TaskProfileAssignment>;
-  const countProfileId =
-    typeof candidate.count_profile_id === "string" ? candidate.count_profile_id.trim() : "";
-  const timerProfileId =
-    typeof candidate.timer_profile_id === "string" ? candidate.timer_profile_id.trim() : "";
-
-  if (!countProfileId || !timerProfileId) {
-    return null;
-  }
-
-  return {
-    count_profile_id: countProfileId,
-    timer_profile_id: timerProfileId,
-  };
-}
-
-function loadProfileAssignments(): void {
-  const parsed = parseJson(localStorage.getItem(PROFILE_ASSIGNMENTS_STORAGE_KEY));
-  if (!parsed || typeof parsed !== "object") {
-    profileAssignments.value = {};
-    return;
-  }
-
-  const normalized: Record<string, TaskProfileAssignment> = {};
-  for (const [taskId, assignment] of Object.entries(parsed as Record<string, unknown>)) {
-    const parsedAssignment = parseAssignment(assignment);
-    if (parsedAssignment) {
-      normalized[taskId] = parsedAssignment;
+  const next: Record<string, TaskUiPreferences> = {};
+  for (const [taskId, maybePreferences] of Object.entries(parsed as Record<string, unknown>)) {
+    const sanitized = sanitizeTaskUiPreferences(maybePreferences);
+    if (sanitized) {
+      next[taskId] = sanitized;
     }
   }
 
-  profileAssignments.value = normalized;
-}
-
-function persistProfileAssignments(): void {
-  localStorage.setItem(PROFILE_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(profileAssignments.value));
+  taskUiPreferences.value = next;
+  persistTaskUiPreferences();
 }
 
 function restoreTabPreference(): void {
@@ -322,154 +212,101 @@ function togglePin(taskId: string): void {
   persistPins();
 }
 
-function resolveCountProfileId(rawId: string): string {
-  if (rawId && countProfileById.value.has(rawId)) {
-    return rawId;
+function reconcileTaskUiPreferences(taskIds: string[]): void {
+  const validTaskIds = new Set(taskIds);
+  const next: Record<string, TaskUiPreferences> = {};
+  let changed = false;
+
+  for (const [taskId, preferences] of Object.entries(taskUiPreferences.value)) {
+    if (!validTaskIds.has(taskId)) {
+      changed = true;
+      continue;
+    }
+
+    const sanitized = sanitizeTaskUiPreferences(preferences);
+    if (!sanitized) {
+      changed = true;
+      continue;
+    }
+
+    next[taskId] = sanitized;
   }
-  if (countProfileById.value.has(DEFAULT_COUNT_PROFILE_ID)) {
-    return DEFAULT_COUNT_PROFILE_ID;
+
+  if (Object.keys(next).length !== Object.keys(taskUiPreferences.value).length) {
+    changed = true;
   }
-  return allCountProfiles.value[0]?.id ?? "";
+
+  taskUiPreferences.value = next;
+  if (changed) {
+    persistTaskUiPreferences();
+  }
 }
 
-function resolveTimerProfileId(rawId: string): string {
-  if (rawId && timerProfileById.value.has(rawId)) {
-    return rawId;
+function resolveTaskUiPreferences(taskId: string): TaskUiPreferences {
+  const explicitPreferences = taskUiPreferences.value[taskId];
+  if (explicitPreferences) {
+    return explicitPreferences;
   }
-  if (timerProfileById.value.has(DEFAULT_TIMER_PROFILE_ID)) {
-    return DEFAULT_TIMER_PROFILE_ID;
-  }
-  return allTimerProfiles.value[0]?.id ?? "";
-}
-
-function normalizeAssignment(raw: TaskProfileAssignment | undefined): TaskProfileAssignment {
-  const countProfileId = resolveCountProfileId(raw?.count_profile_id ?? "");
-  const timerProfileId = resolveTimerProfileId(raw?.timer_profile_id ?? "");
 
   return {
-    count_profile_id: countProfileId,
-    timer_profile_id: timerProfileId,
+    count_label_mode: DEFAULT_COUNT_LABEL_MODE,
+    tile_size: DEFAULT_TILE_SIZE_MODE,
+    count_cap: DEFAULT_COUNT_CAP,
   };
 }
 
-function sameAssignment(left: TaskProfileAssignment, right: TaskProfileAssignment): boolean {
-  return (
-    left.count_profile_id === right.count_profile_id && left.timer_profile_id === right.timer_profile_id
-  );
-}
-
-function reconcileAssignments(taskIds: string[]): void {
-  const next: Record<string, TaskProfileAssignment> = {};
-  let changed = Object.keys(profileAssignments.value).length !== taskIds.length;
-
-  for (const taskId of taskIds) {
-    const normalized = normalizeAssignment(profileAssignments.value[taskId]);
-    next[taskId] = normalized;
-
-    const existing = profileAssignments.value[taskId];
-    if (!existing || !sameAssignment(existing, normalized)) {
-      changed = true;
-    }
-  }
-
-  profileAssignments.value = next;
-  if (changed) {
-    persistProfileAssignments();
-  }
-}
-
-function selectedCountProfileId(taskId: string): string {
-  return normalizeAssignment(profileAssignments.value[taskId]).count_profile_id;
-}
-
-function selectedTimerProfileId(taskId: string): string {
-  return normalizeAssignment(profileAssignments.value[taskId]).timer_profile_id;
-}
-
-function updateTaskCountProfile(taskId: string, profileId: string): void {
-  if (!countProfileById.value.has(profileId)) {
+function updateTaskCountLabelMode(taskId: string, mode: CountLabelMode): void {
+  const normalizedMode = sanitizeCountLabelMode(mode);
+  if (!normalizedMode) {
     return;
   }
 
-  const next = normalizeAssignment(profileAssignments.value[taskId]);
-  next.count_profile_id = profileId;
-  profileAssignments.value = {
-    ...profileAssignments.value,
-    [taskId]: next,
+  const current = resolveTaskUiPreferences(taskId);
+  taskUiPreferences.value = {
+    ...taskUiPreferences.value,
+    [taskId]: {
+      count_label_mode: normalizedMode,
+      tile_size: current.tile_size,
+      count_cap: current.count_cap,
+    },
   };
-  persistProfileAssignments();
+  persistTaskUiPreferences();
 }
 
-function updateTaskTimerProfile(taskId: string, profileId: string): void {
-  if (!timerProfileById.value.has(profileId)) {
+function updateTaskTileSize(taskId: string, mode: TileSizeMode): void {
+  const normalizedMode = sanitizeTileSizeMode(mode);
+  if (!normalizedMode) {
     return;
   }
 
-  const next = normalizeAssignment(profileAssignments.value[taskId]);
-  next.timer_profile_id = profileId;
-  profileAssignments.value = {
-    ...profileAssignments.value,
-    [taskId]: next,
+  const current = resolveTaskUiPreferences(taskId);
+  taskUiPreferences.value = {
+    ...taskUiPreferences.value,
+    [taskId]: {
+      count_label_mode: current.count_label_mode,
+      tile_size: normalizedMode,
+      count_cap: current.count_cap,
+    },
   };
-  persistProfileAssignments();
+  persistTaskUiPreferences();
 }
 
-function parseManualValues(raw: string): number[] {
-  return raw
-    .split(/[\s,;]+/)
-    .map((chunk) => Number(chunk.trim()))
-    .filter((value) => Number.isFinite(value));
-}
-
-function createCustomProfile(): void {
-  const name = newProfileName.value.trim();
-  if (!name) {
-    showToast("Give the setup a name.", "error", 2400);
+function updateTaskCountCap(taskId: string, raw: string): void {
+  const nextCap = sanitizeCountCap(raw);
+  if (!nextCap) {
     return;
   }
 
-  const sourceValues = parseManualValues(newProfileValues.value);
-  const maxValue = newProfileKind.value === "count" ? CUSTOM_COUNT_MAX : CUSTOM_TIMER_MAX;
-  const values = normalizeNumericValues(sourceValues).filter((value) => value <= maxValue);
-
-  if (values.length === 0) {
-    showToast("Enter positive numbers like 1,2,3 or 60,65,70.", "error", 2800);
-    return;
-  }
-
-  const id = `custom_${newProfileKind.value}_${Date.now().toString(36)}_${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-
-  if (newProfileKind.value === "count") {
-    customCountProfiles.value = [
-      ...customCountProfiles.value,
-      {
-        id,
-        kind: "count",
-        name,
-        source: "custom",
-        mode: newCountMode.value,
-        values,
-      },
-    ];
-  } else {
-    customTimerProfiles.value = [
-      ...customTimerProfiles.value,
-      {
-        id,
-        kind: "timer",
-        name,
-        source: "custom",
-        values,
-      },
-    ];
-  }
-
-  persistCustomProfiles();
-  showToast("Setup created.", "success", 1600);
-  newProfileName.value = "";
-  newProfileValues.value = "";
+  const current = resolveTaskUiPreferences(taskId);
+  taskUiPreferences.value = {
+    ...taskUiPreferences.value,
+    [taskId]: {
+      count_label_mode: current.count_label_mode,
+      tile_size: current.tile_size,
+      count_cap: nextCap,
+    },
+  };
+  persistTaskUiPreferences();
 }
 
 async function loadBootstrap(): Promise<void> {
@@ -482,7 +319,7 @@ async function loadBootstrap(): Promise<void> {
     categoryFilter.value = "ALL";
     searchFilter.value = "";
     loadPins(payload.pinned_task_ids ?? []);
-    reconcileAssignments(payload.tasks.map((task) => task.id));
+    reconcileTaskUiPreferences(payload.tasks.map((task) => task.id));
   } catch (error) {
     fetchError.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -508,6 +345,95 @@ const pinnedTasks = computed(() => {
   return bootstrapData.value.tasks.filter((task) => pinnedTaskIds.value.has(task.id));
 });
 
+function resolveTaskTargetForCompletion(task: TaskItem): number | null {
+  if (task.time_only) {
+    return null;
+  }
+
+  if (typeof task.target_count === "number" && task.target_count > 0) {
+    return task.target_count;
+  }
+
+  const highestKnownTarget = Math.max(...Object.values(task.counts));
+  if (Number.isFinite(highestKnownTarget) && highestKnownTarget > 0) {
+    return highestKnownTarget;
+  }
+
+  return null;
+}
+
+function isTaskCompleted(task: TaskItem): boolean {
+  const target = resolveTaskTargetForCompletion(task);
+  return target !== null && task.current_count >= target;
+}
+
+const completedPinnedCount = computed(() =>
+  pinnedTasks.value.filter((task) => isTaskCompleted(task)).length
+);
+
+const userDisplayName = computed(() => bootstrapData.value?.user.display_name?.trim() || "Dojo Member");
+const userCohort = computed(() => bootstrapData.value?.user.dojo_cohort ?? "");
+const settingsDisplayCohort = computed(() =>
+  cohortFilter.value === "ALL" ? userCohort.value : cohortFilter.value
+);
+
+function resolveTaskCountForCohort(task: TaskItem, cohort: string): number | null {
+  const cohortCount = task.counts[cohort];
+  if (Number.isFinite(cohortCount) && cohortCount > 0) {
+    return cohortCount;
+  }
+
+  const allCohortsCount = task.counts["ALL_COHORTS"];
+  if (Number.isFinite(allCohortsCount) && allCohortsCount > 0) {
+    return allCohortsCount;
+  }
+
+  if (typeof task.target_count === "number" && task.target_count > 0) {
+    return task.target_count;
+  }
+
+  const highestKnownTarget = Math.max(...Object.values(task.counts));
+  if (Number.isFinite(highestKnownTarget) && highestKnownTarget > 0) {
+    return highestKnownTarget;
+  }
+
+  return null;
+}
+
+function formatTaskName(task: TaskItem, cohort: string): string {
+  TASK_COUNT_TEMPLATE_REGEX.lastIndex = 0;
+  if (!TASK_COUNT_TEMPLATE_REGEX.test(task.name)) {
+    return task.name;
+  }
+
+  TASK_COUNT_TEMPLATE_REGEX.lastIndex = 0;
+  const resolvedCount = resolveTaskCountForCohort(task, cohort);
+  if (resolvedCount === null) {
+    return task.name.replace(TASK_COUNT_TEMPLATE_REGEX, "?");
+  }
+  return task.name.replace(TASK_COUNT_TEMPLATE_REGEX, resolvedCount.toString());
+}
+
+function pinnedTaskDisplayName(task: TaskItem): string {
+  return formatTaskName(task, userCohort.value);
+}
+
+function settingsTaskDisplayName(task: TaskItem): string {
+  return formatTaskName(task, settingsDisplayCohort.value);
+}
+
+function formatLoggedAt(isoString: string): string {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return "just now";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 const filteredTasks = computed(() => {
   if (!bootstrapData.value) {
     return [] as TaskItem[];
@@ -516,85 +442,81 @@ const filteredTasks = computed(() => {
   const query = searchFilter.value.trim().toLowerCase();
 
   return bootstrapData.value.tasks.filter((task) => {
-    if (cohortFilter.value !== "ALL" && !(cohortFilter.value in task.counts)) {
+    if (
+      cohortFilter.value !== "ALL" &&
+      Object.keys(task.counts).length > 0 &&
+      !(cohortFilter.value in task.counts)
+    ) {
       return false;
     }
     if (categoryFilter.value !== "ALL" && task.category !== categoryFilter.value) {
       return false;
     }
-    if (query && !task.name.toLowerCase().includes(query)) {
+    if (query && !settingsTaskDisplayName(task).toLowerCase().includes(query)) {
       return false;
     }
     if (pinnedOnly.value && !pinnedTaskIds.value.has(task.id)) {
+      return false;
+    }
+    if (hideCompleted.value && isTaskCompleted(task)) {
       return false;
     }
     return true;
   });
 });
 
-function countProfileForTask(task: TaskItem): CountProfile {
-  const profileId = selectedCountProfileId(task.id);
-  return (
-    countProfileById.value.get(profileId) ??
-    countProfileById.value.get(DEFAULT_COUNT_PROFILE_ID) ??
-    allCountProfiles.value[0]
-  );
-}
-
-function timerProfileForTask(task: TaskItem): TimerProfile {
-  const profileId = selectedTimerProfileId(task.id);
-  return (
-    timerProfileById.value.get(profileId) ??
-    timerProfileById.value.get(DEFAULT_TIMER_PROFILE_ID) ??
-    allTimerProfiles.value[0]
-  );
-}
-
-function resolveCountValues(task: TaskItem, profile: CountProfile): number[] {
-  if (profile.id === POLGAR_COUNT_PROFILE_ID) {
-    const values: number[] = [];
-    for (let value = task.current_count + 1; value <= task.current_count + 30; value += 1) {
-      values.push(value);
-    }
-    return values;
-  }
-
-  const values = normalizeNumericValues(profile.values);
-  if (profile.mode === "absolute") {
-    return values.filter((value) => value > task.current_count);
-  }
-  return values;
-}
-
 const countTileOptions = computed(() => {
-  if (!selectedTask.value) {
+  if (!selectedTask.value || selectedTask.value.time_only) {
     return [] as { value: number; label: string }[];
   }
 
-  const profile = countProfileForTask(selectedTask.value);
-  return resolveCountValues(selectedTask.value, profile).map((value) => ({
-    value,
-    label: value.toString(),
-  }));
+  const preferences = resolveTaskUiPreferences(selectedTask.value.id);
+  const values: { value: number; label: string }[] = [];
+
+  for (let increment = 1; increment <= preferences.count_cap; increment += 1) {
+    values.push({
+      value: increment,
+      label:
+        preferences.count_label_mode === "absolute"
+          ? (selectedTask.value.current_count + increment).toString()
+          : `+${increment}`,
+    });
+  }
+
+  return values;
 });
 
 const minuteTileOptions = computed(() => {
-  if (!selectedTask.value) {
-    return [] as { value: number; label: string }[];
-  }
-
-  const profile = timerProfileForTask(selectedTask.value);
-  return normalizeNumericValues(profile.values).map((value) => ({
+  return TIMER_OPTIONS.map((value) => ({
     value,
     label: formatMinuteLabel(value),
   }));
 });
 
+const currentTileSizeMode = computed<TileSizeMode>(() => {
+  if (!selectedTask.value) {
+    return DEFAULT_TILE_SIZE_MODE;
+  }
+
+  return resolveTaskUiPreferences(selectedTask.value.id).tile_size;
+});
+
 const minuteSubtitle = computed(() => {
-  if (!selectedTask.value || selectedCount.value === null) {
+  if (!selectedTask.value) {
     return "";
   }
-  return `${selectedTask.value.name} � ${selectedCountLabel.value || `+${selectedCount.value}`}`;
+
+  if (selectedTask.value.time_only) {
+    return pinnedTaskDisplayName(selectedTask.value);
+  }
+
+  if (selectedCount.value === null) {
+    return "";
+  }
+
+  return `${pinnedTaskDisplayName(selectedTask.value)} • ${
+    selectedCountLabel.value || `+${selectedCount.value}`
+  }`;
 });
 
 function startLogFlow(task: TaskItem): void {
@@ -605,6 +527,12 @@ function startLogFlow(task: TaskItem): void {
   selectedTask.value = task;
   selectedCount.value = null;
   selectedCountLabel.value = "";
+  if (task.time_only) {
+    selectedCount.value = 0;
+    selectedCountLabel.value = "Time only";
+    flowStage.value = "minutes";
+    return;
+  }
   flowStage.value = "count";
 }
 
@@ -613,20 +541,12 @@ function selectCount(value: number): void {
     return;
   }
 
-  const profile = countProfileForTask(selectedTask.value);
-  if (profile.mode === "absolute") {
-    const increment = value - selectedTask.value.current_count;
-    if (increment < 1) {
-      showToast("Selected count must be above current progress.", "error", 2600);
-      return;
-    }
-
-    selectedCount.value = increment;
-    selectedCountLabel.value = `${value} (+${increment})`;
-  } else {
-    selectedCount.value = value;
-    selectedCountLabel.value = `+${value}`;
-  }
+  const preferences = resolveTaskUiPreferences(selectedTask.value.id);
+  selectedCount.value = value;
+  selectedCountLabel.value =
+    preferences.count_label_mode === "absolute"
+      ? `${selectedTask.value.current_count + value} (+${value})`
+      : `+${value}`;
 
   flowStage.value = "minutes";
 }
@@ -639,7 +559,6 @@ async function selectMinutes(value: number): Promise<void> {
   const task = selectedTask.value;
   const count = selectedCount.value;
 
-  resetFlow();
   submitting.value = true;
   showToast("Processing...", "info");
 
@@ -651,10 +570,17 @@ async function selectMinutes(value: number): Promise<void> {
     });
 
     task.current_count = response.submitted_payload.newCount;
+    lastSubmission.value = {
+      task_name: pinnedTaskDisplayName(task),
+      count_increment: count,
+      minutes_spent: value,
+      logged_at: new Date().toISOString(),
+    };
+    resetFlow();
     showToast("Done", "success", 1800);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    showToast(`Failed: ${message}`, "error", 3600);
+    showToast(`Failed: ${message}. Tap a time tile to retry.`, "error", 4200);
   } finally {
     submitting.value = false;
   }
@@ -662,6 +588,10 @@ async function selectMinutes(value: number): Promise<void> {
 
 function pickerBack(): void {
   if (flowStage.value === "minutes") {
+    if (selectedTask.value?.time_only) {
+      resetFlow();
+      return;
+    }
     flowStage.value = "count";
     return;
   }
@@ -677,42 +607,66 @@ watch(activeTab, (value) => {
 });
 
 restoreTabPreference();
-loadCustomProfiles();
-loadProfileAssignments();
+loadTaskUiPreferences();
 loadBootstrap();
 </script>
 
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <h1>DojoTap</h1>
-      <nav class="tab-nav" aria-label="Primary tabs">
-        <button
-          type="button"
-          class="tab-btn"
-          :class="{ active: activeTab === 'pinned' }"
-          @click="activeTab = 'pinned'"
-        >
-          Pinned
-        </button>
-        <button
-          type="button"
-          class="tab-btn"
-          :class="{ active: activeTab === 'settings' }"
-          @click="activeTab = 'settings'"
-        >
-          Settings
-        </button>
-      </nav>
+      <div class="brand-wrap">
+        <h1>DojoTap</h1>
+        <p class="brand-subtitle">Tap-first progress logging for ChessDojo.</p>
+      </div>
+
+      <div class="topbar-right">
+        <div v-if="bootstrapData" class="status-strip">
+          <span class="status-chip">{{ userDisplayName }}</span>
+          <span class="status-chip">{{ pinnedTasks.length }} pinned</span>
+          <span class="status-chip">{{ completedPinnedCount }} completed</span>
+        </div>
+        <nav class="tab-nav" aria-label="Primary tabs">
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeTab === 'pinned' }"
+            @click="activeTab = 'pinned'"
+          >
+            Pinned
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeTab === 'settings' }"
+            @click="activeTab = 'settings'"
+          >
+            Settings
+          </button>
+        </nav>
+      </div>
     </header>
 
     <p v-if="fetchError" class="notice error">{{ fetchError }}</p>
     <p v-if="loading" class="notice">Loading tasks...</p>
 
     <main v-if="bootstrapData" class="main-view" :class="{ busy: submitting }">
-      <section v-if="activeTab === 'pinned'" class="pane">
+      <section v-if="activeTab === 'pinned'" class="pane pinned-pane">
         <Transition name="stage" mode="out-in">
-          <div v-if="flowStage === 'task'" key="task" class="stage-wrap">
+          <div v-if="flowStage === 'task'" key="task" class="stage-wrap task-stage">
+            <section class="quick-rail">
+              <h2>Quick Log</h2>
+              <p>Choose a pinned task, then tap count and time (or time only for timer tasks).</p>
+              <p v-if="lastSubmission" class="last-log">
+                Last: <strong>{{ lastSubmission.task_name }}</strong>
+                <template v-if="lastSubmission.count_increment > 0">
+                  +{{ lastSubmission.count_increment }}
+                </template>
+                <template v-else>time only</template>
+                in {{ formatMinuteLabel(lastSubmission.minutes_spent) }}
+                at {{ formatLoggedAt(lastSubmission.logged_at) }}
+              </p>
+            </section>
+
             <p v-if="pinnedTasks.length === 0" class="empty-state">
               No pinned tasks yet. Open Settings to pin what you want here.
             </p>
@@ -722,11 +676,11 @@ loadBootstrap();
                 :key="task.id"
                 mode="pinned"
                 :task="task"
+                :display-name="pinnedTaskDisplayName(task)"
                 :is-pinned="true"
-                :count-profile-choices="countProfileChoices"
-                :timer-profile-choices="timerProfileChoices"
-                :selected-count-profile-id="selectedCountProfileId(task.id)"
-                :selected-timer-profile-id="selectedTimerProfileId(task.id)"
+                :count-label-mode="resolveTaskUiPreferences(task.id).count_label_mode"
+                :tile-size="resolveTaskUiPreferences(task.id).tile_size"
+                :count-cap="resolveTaskUiPreferences(task.id).count_cap"
                 @select="startLogFlow"
               />
             </div>
@@ -735,9 +689,10 @@ loadBootstrap();
           <div v-else-if="flowStage === 'count'" key="count" class="stage-wrap">
             <TilePicker
               title="Count"
-              :subtitle="selectedTask?.name || ''"
+              :subtitle="selectedTask ? pinnedTaskDisplayName(selectedTask) : ''"
               :options="countTileOptions"
-              empty-message="No count options are available above current progress for this setup."
+              :tile-size="currentTileSizeMode"
+              empty-message="No count options are configured."
               @select="selectCount"
               @back="pickerBack"
             />
@@ -748,7 +703,8 @@ loadBootstrap();
               title="Time"
               :subtitle="minuteSubtitle"
               :options="minuteTileOptions"
-              empty-message="No timer options are available for this setup."
+              :tile-size="currentTileSizeMode"
+              empty-message="No timer options are configured."
               @select="selectMinutes"
               @back="pickerBack"
             />
@@ -757,89 +713,43 @@ loadBootstrap();
       </section>
 
       <section v-else class="pane settings-pane">
-        <FilterBar
-          :cohort="cohortFilter"
-          :category="categoryFilter"
-          :search="searchFilter"
-          :pinned-only="pinnedOnly"
-          :cohort-options="cohortOptions"
-          :category-options="categoryOptions"
-          @update-cohort="cohortFilter = $event"
-          @update-category="categoryFilter = $event"
-          @update-search="searchFilter = $event"
-          @update-pinned-only="pinnedOnly = $event"
-          @refresh="loadBootstrap"
-        />
+        <div class="settings-layout">
+          <aside class="settings-sidebar">
+            <FilterBar
+              :cohort="cohortFilter"
+              :category="categoryFilter"
+              :search="searchFilter"
+              :pinned-only="pinnedOnly"
+              :hide-completed="hideCompleted"
+              :cohort-options="cohortOptions"
+              :category-options="categoryOptions"
+              @update-cohort="cohortFilter = $event"
+              @update-category="categoryFilter = $event"
+              @update-search="searchFilter = $event"
+              @update-pinned-only="pinnedOnly = $event"
+              @update-hide-completed="hideCompleted = $event"
+              @refresh="loadBootstrap"
+            />
+          </aside>
 
-        <section class="profile-builder" data-testid="profile-builder">
-          <h2>Create Tile Setup</h2>
-          <div class="profile-builder-grid">
-            <label>
-              Setup type
-              <select v-model="newProfileKind" data-testid="new-setup-kind">
-                <option value="count">Count</option>
-                <option value="timer">Timer</option>
-              </select>
-            </label>
-
-            <label v-if="newProfileKind === 'count'">
-              Count mode
-              <select v-model="newCountMode" data-testid="new-count-mode">
-                <option value="absolute">Absolute totals</option>
-                <option value="increment">Increments</option>
-              </select>
-            </label>
-
-            <label>
-              Name
-              <input
-                v-model="newProfileName"
-                type="text"
-                placeholder="e.g. My Long Session"
-                data-testid="new-setup-name"
-              />
-            </label>
-
-            <label class="profile-values-field">
-              Values
-              <input
-                v-model="newProfileValues"
-                type="text"
-                placeholder="e.g. 1,2,3,4 or 60,65,70"
-                data-testid="new-setup-values"
-              />
-            </label>
-
-            <button
-              type="button"
-              class="ghost-btn"
-              data-testid="create-setup"
-              @click="createCustomProfile"
-            >
-              Save setup
-            </button>
+          <div class="settings-list">
+            <TaskTile
+              v-for="task in filteredTasks"
+              :key="task.id"
+              mode="settings"
+              :task="task"
+              :display-name="settingsTaskDisplayName(task)"
+              :is-pinned="pinnedTaskIds.has(task.id)"
+              :count-label-mode="resolveTaskUiPreferences(task.id).count_label_mode"
+              :tile-size="resolveTaskUiPreferences(task.id).tile_size"
+              :count-cap="resolveTaskUiPreferences(task.id).count_cap"
+              @toggle-pin="togglePin"
+              @update-count-label-mode="updateTaskCountLabelMode"
+              @update-tile-size="updateTaskTileSize"
+              @update-count-cap="updateTaskCountCap"
+            />
+            <p v-if="filteredTasks.length === 0" class="empty-state">No tasks match this filter.</p>
           </div>
-          <p class="profile-builder-hint">
-            Reusable global setups. Values are normalized, deduplicated, and sorted.
-          </p>
-        </section>
-
-        <div class="settings-list">
-          <TaskTile
-            v-for="task in filteredTasks"
-            :key="task.id"
-            mode="settings"
-            :task="task"
-            :is-pinned="pinnedTaskIds.has(task.id)"
-            :count-profile-choices="countProfileChoices"
-            :timer-profile-choices="timerProfileChoices"
-            :selected-count-profile-id="selectedCountProfileId(task.id)"
-            :selected-timer-profile-id="selectedTimerProfileId(task.id)"
-            @toggle-pin="togglePin"
-            @update-count-profile="updateTaskCountProfile"
-            @update-timer-profile="updateTaskTimerProfile"
-          />
-          <p v-if="filteredTasks.length === 0" class="empty-state">No tasks match this filter.</p>
         </div>
       </section>
     </main>
@@ -851,3 +761,4 @@ loadBootstrap();
     </Transition>
   </div>
 </template>
+

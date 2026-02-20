@@ -1,5 +1,5 @@
 # DojoTap
-Tile-first web app to log ChessDojo progress fast using taps only (task tile -> count tile -> minutes tile).
+Dark-first, tile-only web app to log ChessDojo progress fast (task tile -> count tile -> minutes tile).
 
 ## Quick Start
 ```powershell
@@ -31,14 +31,41 @@ npm run e2e:smoke
 
 Open `http://localhost:5173`.
 
-## Tile Setup Profiles
-- Every task can have its own `Count setup` and `Timer setup` (configure in the `Settings` tab).
-- Built-in setups include:
-  - `Polgar M2 Next 30` for count (`current + 1 ... current + 30`)
-  - `Study Chapters 1-30`
-  - `Classical 1-7 + 60-180`
-  - Timer options including `Every 5m to 180` and `Classical 60-180`
-- You can create reusable custom count/timer setups in `Settings` with a manual list, for example `1,2,3,5,8` or `60,65,70`.
+## Agent Visual Loop (Codex + Playwright MCP)
+`frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.
+
+Local loop:
+```powershell
+cd frontend
+npm run dev:host
+codex
+```
+
+Optional direct MCP launch:
+```powershell
+cd frontend
+npm run mcp:playwright
+```
+
+If needed, re-run config setup manually:
+```powershell
+cd frontend
+npm run setup:codex-mcp
+```
+
+## Tile Controls
+- DojoTap now merges standard requirements with custom tasks (`/user/access/v2`), so custom tasks appear in the same pin/settings flow.
+- Count tiles always increment by `1` (`+1` to `+N`), with cap configurable per task from `1..200` in each Settings task card.
+- Timer tiles are fixed to `5, 10, 15, ... , 180`.
+- Per task card in `Settings`, you can directly choose:
+  - count label mode: `+N` or `Absolute` (shows `current + N`)
+  - tile size mode: `Large` or `Small`
+  - count cap: `1..200` (scrollable select)
+- Hardcoded defaults for tasks without an override are fixed and not user-editable:
+  - count cap: `10`
+  - count label mode: `+N`
+  - tile size: `Large`
+- Time-only custom tasks skip the count step and go directly to timer selection.
 
 ## Tech Stack
 - Python 3.13

@@ -20,6 +20,8 @@ class TaskItem(BaseModel):
     sort_priority: str
     current_count: int
     target_count: int | None
+    is_custom: bool = False
+    time_only: bool = False
 
 
 class BootstrapResponse(BaseModel):
@@ -33,7 +35,7 @@ class BootstrapResponse(BaseModel):
 
 class SubmitProgressRequest(BaseModel):
     requirement_id: str = Field(min_length=1)
-    count_increment: int = Field(ge=1)
+    count_increment: int = Field(ge=0)
     minutes_spent: int = Field(ge=1)
 
 
@@ -46,4 +48,3 @@ class HealthResponse(BaseModel):
     ok: bool
     token_configured: bool
     upstream_reachable: bool
-

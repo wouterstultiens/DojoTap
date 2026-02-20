@@ -1,7 +1,7 @@
 export type ProgressMap = Record<string, Record<string, unknown>>;
 
-export type CountProfileMode = "increment" | "absolute";
-export type ProfileSource = "builtin" | "custom";
+export type CountLabelMode = "increment" | "absolute";
+export type TileSizeMode = "small" | "large";
 
 export interface UserInfo {
   display_name: string;
@@ -20,6 +20,8 @@ export interface TaskItem {
   sort_priority: string;
   current_count: number;
   target_count: number | null;
+  is_custom: boolean;
+  time_only: boolean;
 }
 
 export interface BootstrapResponse {
@@ -50,28 +52,8 @@ export interface SubmitProgressResponse {
   upstream_response: unknown;
 }
 
-interface NumericProfileBase {
-  id: string;
-  name: string;
-  source: ProfileSource;
-  values: number[];
-}
-
-export interface CountProfile extends NumericProfileBase {
-  kind: "count";
-  mode: CountProfileMode;
-}
-
-export interface TimerProfile extends NumericProfileBase {
-  kind: "timer";
-}
-
-export interface TaskProfileAssignment {
-  count_profile_id: string;
-  timer_profile_id: string;
-}
-
-export interface ProfileChoice {
-  id: string;
-  label: string;
+export interface TaskUiPreferences {
+  count_label_mode: CountLabelMode;
+  tile_size: TileSizeMode;
+  count_cap: number;
 }

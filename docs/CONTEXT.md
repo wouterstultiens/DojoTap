@@ -12,6 +12,7 @@
   - Vite `6`
   - TypeScript `5`
   - Playwright `@playwright/test`
+  - Frontend `postinstall` runs `npm run setup:codex-mcp` to auto-ensure `.codex/config.toml` has Playwright MCP config
 - Testing:
   - `pytest` for backend unit logic
   - `backend/scripts/api_smoke.py` for repeated non-destructive API validation
@@ -24,8 +25,14 @@
 - v1 supports adding progress only via `POST /user/progress/v3`.
 - No delete automation in v1.
 - Keep tile-first UX: no typing for count/minutes in normal flow.
-- Task count/timer setups are profile-driven and task-specific.
-- Profile persistence is local browser storage only in v1 (no backend sync).
+- Count tiles are always contiguous increments (`+1..+N`, step `1`).
+- Count cap is configurable per task (`1..200`), with hardcoded fallback default `10`.
+- Timer tiles are fixed to `5..180` in steps of `5`.
+- Hardcoded fallback defaults are fixed and not user-editable:
+  - count cap: `10`
+  - count label mode: `+N`
+  - tile size: `large`
+- UI preference persistence is local browser storage only in v1 (no backend sync).
 
 ## Project Structure
 ```text
@@ -42,8 +49,12 @@ DojoTap/
       test_payloads.py # count math and payload tests
   frontend/
     e2e/
-      smoke.spec.ts    # mocked API smoke test
+      smoke.spec.ts         # mocked API smoke test
+      visual-audit.spec.ts  # desktop visual capture flow (mocked API)
+      mobile-audit.spec.ts  # mobile visual capture flow (mocked API)
     playwright.config.ts
+    scripts/
+      ensure-codex-playwright-mcp.mjs # auto-provisions Codex Playwright MCP config
     src/
       App.vue
       api.ts
@@ -69,16 +80,23 @@ DojoTap/
   - math and mapping helpers separated from route handlers
 - Use `snake_case` in backend payloads returned to frontend.
 - Frontend app model:
+  - Dark mode only (no light theme toggle in v1).
   - Two tabs: `Pinned` (main) and `Settings`
-  - `Pinned` tab is full-screen staged flow:
-    - task title tile -> count tile -> minutes tile -> submit
-  - After minutes select: return to task stage and show toast state (`Processing...`, then `Done` on success)
+  - `Pinned` tab flow is staged and tap-only:
+    - normal task: task card -> count tile -> minutes tile -> submit
+    - time-only custom task: task card -> minutes tile -> submit
+  - Submit behavior:
+    - success: updates task progress, returns to task stage, toast `Done`
+    - failure: remains on minutes stage so the user can retry immediately
 - `Settings` tab owns filters/search and pin management (inline pin/unpin actions).
-- `Settings` tab also owns per-task setup assignment:
-  - task-specific `Count setup` selector
-  - task-specific `Timer setup` selector
-  - reusable custom setup creation (`count`/`timer`, comma-separated values)
+- Backend bootstrap merges standard requirements with custom task access payload (`/user/access/v2`).
+- Settings task cards own per-task overrides:
+  - count label mode (`+N` or absolute current+increment)
+  - tile size (`small` or `large`)
+- count cap (`1..200`) as the third task-card setting
+- Settings filters include `Pinned` and `Hide completed` toggles.
 - Pinned task state is local (`localStorage`) and initialized from server pins.
-- Setup assignments and custom setups are persisted in localStorage.
+- Per-task UI preferences are persisted in localStorage.
+- Frontend dependency install should auto-provision Playwright MCP config via `frontend/scripts/ensure-codex-playwright-mcp.mjs` (idempotent).
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

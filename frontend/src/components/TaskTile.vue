@@ -1,22 +1,55 @@
 <script setup lang="ts">
-import type { ProfileChoice, TaskItem } from "../types";
+import type { CountLabelMode, TaskItem, TileSizeMode } from "../types";
 
 defineProps<{
   task: TaskItem;
+  displayName: string;
   isPinned: boolean;
   mode: "pinned" | "settings";
-  countProfileChoices: ProfileChoice[];
-  timerProfileChoices: ProfileChoice[];
-  selectedCountProfileId: string;
-  selectedTimerProfileId: string;
+  countLabelMode: CountLabelMode;
+  tileSize: TileSizeMode;
+  countCap: number;
 }>();
 
 const emit = defineEmits<{
   select: [task: TaskItem];
   togglePin: [taskId: string];
-  updateCountProfile: [taskId: string, profileId: string];
-  updateTimerProfile: [taskId: string, profileId: string];
+  updateCountLabelMode: [taskId: string, mode: CountLabelMode];
+  updateTileSize: [taskId: string, mode: TileSizeMode];
+  updateCountCap: [taskId: string, cap: string];
 }>();
+
+function resolveTarget(task: TaskItem): number {
+  if (typeof task.target_count === "number" && task.target_count > 0) {
+    return task.target_count;
+  }
+
+  const highestCohortTarget = Math.max(...Object.values(task.counts));
+  if (Number.isFinite(highestCohortTarget) && highestCohortTarget > 0) {
+    return highestCohortTarget;
+  }
+
+  return Math.max(task.current_count, 1);
+}
+
+function progressPercent(task: TaskItem): number {
+  const target = resolveTarget(task);
+  const raw = (task.current_count / target) * 100;
+  return Math.min(100, Math.max(2, raw));
+}
+
+function progressLabel(task: TaskItem): string {
+  if (task.time_only) {
+    return "Time only";
+  }
+
+  const target = resolveTarget(task);
+  if (target <= 0) {
+    return `${task.current_count}`;
+  }
+
+  return `${task.current_count} / ${target}`;
+}
 </script>
 
 <template>
@@ -24,61 +57,84 @@ const emit = defineEmits<{
     <div class="settings-header-row">
       <div class="settings-meta">
         <p class="task-row-category">{{ task.category }}</p>
-        <h3 class="task-row-name">{{ task.name }}</h3>
+        <h3 class="task-row-name">{{ displayName }}</h3>
       </div>
       <button class="pin-toggle" @click="emit('togglePin', task.id)" type="button">
         {{ isPinned ? "Unpin" : "Pin" }}
       </button>
     </div>
+    <div class="settings-controls">
+      <template v-if="!task.time_only">
+        <label class="settings-field">
+          Label
+          <select
+            :value="countLabelMode"
+            :data-testid="`count-label-mode-${task.id}`"
+            @change="
+              emit(
+                'updateCountLabelMode',
+                task.id,
+                ($event.target as HTMLSelectElement).value as CountLabelMode
+              )
+            "
+          >
+            <option value="increment">+N</option>
+            <option value="absolute">Absolute</option>
+          </select>
+        </label>
+      </template>
 
-    <div class="setup-controls">
-      <label class="setup-field">
-        Count setup
+      <label class="settings-field">
+        Tiles
         <select
-          :value="selectedCountProfileId"
-          :data-testid="`count-profile-${task.id}`"
+          :value="tileSize"
+          :data-testid="`tile-size-${task.id}`"
           @change="
             emit(
-              'updateCountProfile',
+              'updateTileSize',
               task.id,
-              ($event.target as HTMLSelectElement).value
+              ($event.target as HTMLSelectElement).value as TileSizeMode
             )
           "
         >
-          <option v-for="choice in countProfileChoices" :key="choice.id" :value="choice.id">
-            {{ choice.label }}
-          </option>
+          <option value="large">Large</option>
+          <option value="small">Small</option>
         </select>
       </label>
 
-      <label class="setup-field">
-        Timer setup
-        <select
-          :value="selectedTimerProfileId"
-          :data-testid="`timer-profile-${task.id}`"
-          @change="
-            emit(
-              'updateTimerProfile',
-              task.id,
-              ($event.target as HTMLSelectElement).value
-            )
-          "
-        >
-          <option v-for="choice in timerProfileChoices" :key="choice.id" :value="choice.id">
-            {{ choice.label }}
-          </option>
-        </select>
-      </label>
+      <template v-if="!task.time_only">
+        <label class="settings-field">
+          Count cap
+          <select
+            :value="countCap"
+            :data-testid="`count-cap-${task.id}`"
+            @change="emit('updateCountCap', task.id, ($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="cap in 200" :key="cap" :value="cap">
+              {{ cap }}
+            </option>
+          </select>
+        </label>
+      </template>
     </div>
+    <p class="task-row-progress">{{ progressLabel(task) }}</p>
   </article>
 
-  <button
-    v-else
-    class="pinned-title-tile"
-    :data-testid="`pinned-task-${task.id}`"
-    type="button"
-    @click="emit('select', task)"
-  >
-    <span>{{ task.name }}</span>
-  </button>
+  <article v-else class="pinned-title-tile">
+    <button
+      class="pinned-select-btn"
+      :data-testid="`pinned-task-${task.id}`"
+      type="button"
+      @click="emit('select', task)"
+    >
+      <div class="pinned-task-head">
+        <p class="pinned-task-category">{{ task.category }}</p>
+        <p class="pinned-task-progress">{{ progressLabel(task) }}</p>
+      </div>
+      <h3 class="pinned-task-name">{{ displayName }}</h3>
+      <div v-if="!task.time_only" class="pinned-task-track" aria-hidden="true">
+        <span class="pinned-task-track-fill" :style="{ width: `${progressPercent(task)}%` }"></span>
+      </div>
+    </button>
+  </article>
 </template>

@@ -4,6 +4,7 @@ defineProps<{
   category: string;
   search: string;
   pinnedOnly: boolean;
+  hideCompleted: boolean;
   cohortOptions: string[];
   categoryOptions: string[];
 }>();
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   updateCategory: [value: string];
   updateSearch: [value: string];
   updatePinnedOnly: [value: boolean];
+  updateHideCompleted: [value: boolean];
   refresh: [];
 }>();
 </script>
@@ -61,10 +63,18 @@ const emit = defineEmits<{
         :checked="pinnedOnly"
         @change="emit('updatePinnedOnly', ($event.target as HTMLInputElement).checked)"
       />
-      Pinned only
+      Pinned
+    </label>
+
+    <label class="check-wrap">
+      <input
+        type="checkbox"
+        :checked="hideCompleted"
+        @change="emit('updateHideCompleted', ($event.target as HTMLInputElement).checked)"
+      />
+      Hide completed
     </label>
 
     <button class="ghost-btn" type="button" @click="emit('refresh')">Refresh</button>
   </section>
 </template>
-

@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "setup:codex-mcp": "node ./scripts/ensure-codex-playwright-mcp.mjs",
+    "postinstall": "npm run setup:codex-mcp",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "mcp:playwright": "npx @playwright/mcp@latest --isolated --save-trace --output-dir .artifacts/playwright-mcp --browser chromium --host 127.0.0.1 --port 3000",
     "e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "e2e:headed": "playwright test e2e/smoke.spec.ts --headed",
     "e2e:report": "playwright show-report"

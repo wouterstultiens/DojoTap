@@ -26,6 +26,9 @@ class ChessDojoClient:
         payload = await self._get_json("/requirements/ALL_COHORTS", params=params)
         return payload.get("requirements", [])
 
+    async def fetch_custom_access(self) -> dict[str, Any]:
+        return await self._get_json("/user/access/v2")
+
     async def post_progress(self, payload: dict[str, Any]) -> Any:
         return await self._post_json("/user/progress/v3", payload)
 
@@ -100,6 +103,20 @@ def _to_int(value: Any, fallback: int = 0) -> int:
         return fallback
 
 
+def _to_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return None
+
+
 def normalize_counts(raw_counts: Any) -> dict[str, int]:
     if not isinstance(raw_counts, dict):
         return {}
@@ -124,18 +141,162 @@ def resolve_target_count(requirement: dict[str, Any], cohort: str) -> int | None
     return None
 
 
+def _first_non_empty_str(payload: dict[str, Any], keys: list[str]) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _resolve_requirement_id(payload: dict[str, Any]) -> str:
+    return _first_non_empty_str(payload, ["id", "requirementId", "requirement_id"])
+
+
+def _resolve_requirement_name(payload: dict[str, Any]) -> str:
+    return _first_non_empty_str(payload, ["name", "requirementName", "title", "label"])
+
+
+def _is_explicit_custom_requirement(payload: dict[str, Any]) -> bool:
+    for key in ("isCustomRequirement", "isCustomTask", "customRequirement", "customTask"):
+        parsed = _to_bool(payload.get(key))
+        if parsed is True:
+            return True
+    return False
+
+
+def _looks_like_requirement(payload: dict[str, Any]) -> bool:
+    return bool(_resolve_requirement_id(payload) and _resolve_requirement_name(payload))
+
+
+def _resolve_time_only(raw: dict[str, Any], counts: dict[str, int]) -> bool:
+    for key in ("timeOnly", "timerOnly", "isTimeOnly", "isTimerOnly", "minutesOnly"):
+        parsed = _to_bool(raw.get(key))
+        if parsed is not None:
+            return parsed
+
+    for key in (
+        "hasCount",
+        "countEnabled",
+        "countRequired",
+        "requiresCount",
+        "trackCount",
+        "enableCount",
+    ):
+        parsed = _to_bool(raw.get(key))
+        if parsed is not None:
+            return not parsed
+
+    tracking_mode = _first_non_empty_str(raw, ["trackingMode", "inputMode", "mode"]).lower()
+    if tracking_mode in {"time_only", "timer_only", "minutes_only"}:
+        return True
+    if tracking_mode in {"count_and_time", "count"}:
+        return False
+
+    return not any(value > 0 for value in counts.values())
+
+
+def _build_custom_requirement(raw: dict[str, Any]) -> dict[str, Any] | None:
+    requirement_id = _resolve_requirement_id(raw)
+    requirement_name = _resolve_requirement_name(raw)
+    if not requirement_id or not requirement_name:
+        return None
+
+    counts = normalize_counts(raw.get("counts", {}))
+    if not counts:
+        counts = normalize_counts(raw.get("targetCounts", {}))
+
+    start_count = _to_int(raw.get("startCount", raw.get("start_count", 0)))
+    time_only = _resolve_time_only(raw, counts)
+
+    return {
+        "id": requirement_id,
+        "name": requirement_name,
+        "category": _first_non_empty_str(raw, ["category", "requirementCategory"]) or "Custom",
+        "counts": counts,
+        "startCount": start_count,
+        "progressBarSuffix": _first_non_empty_str(
+            raw, ["progressBarSuffix", "progress_bar_suffix"]
+        ),
+        "scoreboardDisplay": _first_non_empty_str(raw, ["scoreboardDisplay", "scoreboard_display"]),
+        "numberOfCohorts": _to_int(raw.get("numberOfCohorts", 0)),
+        "sortPriority": _first_non_empty_str(raw, ["sortPriority", "sort_priority"])
+        or f"zzz_custom_{requirement_id}",
+        "isCustomRequirement": True,
+        "timeOnly": time_only,
+    }
+
+
+def extract_custom_requirements(custom_access_payload: Any) -> list[dict[str, Any]]:
+    if not custom_access_payload:
+        return []
+
+    custom_requirements_by_id: dict[str, dict[str, Any]] = {}
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            lower_path = path.lower()
+            explicit_custom = _is_explicit_custom_requirement(node)
+            path_indicates_custom = "custom" in lower_path
+            if _looks_like_requirement(node) and (explicit_custom or path_indicates_custom):
+                built = _build_custom_requirement(node)
+                if built:
+                    custom_requirements_by_id[built["id"]] = built
+
+            for key, value in node.items():
+                walk(value, f"{path}.{key}")
+            return
+
+        if isinstance(node, list):
+            for index, item in enumerate(node):
+                walk(item, f"{path}[{index}]")
+
+    walk(custom_access_payload, "root")
+    return list(custom_requirements_by_id.values())
+
+
+def merge_requirements(
+    requirements_payload: list[dict[str, Any]], custom_access_payload: Any
+) -> list[dict[str, Any]]:
+    requirements_by_id: dict[str, dict[str, Any]] = {}
+
+    for requirement in requirements_payload:
+        requirement_id = str(requirement.get("id", "")).strip()
+        if requirement_id:
+            requirements_by_id[requirement_id] = requirement
+
+    for custom_requirement in extract_custom_requirements(custom_access_payload):
+        requirement_id = str(custom_requirement.get("id", "")).strip()
+        if not requirement_id:
+            continue
+        if requirement_id in requirements_by_id:
+            merged = {**requirements_by_id[requirement_id], **custom_requirement}
+            requirements_by_id[requirement_id] = merged
+            continue
+        requirements_by_id[requirement_id] = custom_requirement
+
+    return list(requirements_by_id.values())
+
+
 def format_bootstrap(
-    user_payload: dict[str, Any], requirements_payload: list[dict[str, Any]]
+    user_payload: dict[str, Any],
+    requirements_payload: list[dict[str, Any]],
+    custom_access_payload: Any = None,
 ) -> BootstrapResponse:
     cohort = str(user_payload.get("dojoCohort", ""))
     progress_map = user_payload.get("progress", {})
     if not isinstance(progress_map, dict):
         progress_map = {}
 
+    merged_requirements = merge_requirements(requirements_payload, custom_access_payload)
+
     tasks: list[TaskItem] = []
     cohort_set: set[str] = set()
 
-    for req in requirements_payload:
+    for req in merged_requirements:
         req_id = str(req.get("id", ""))
         if not req_id:
             continue
@@ -144,6 +305,8 @@ def format_bootstrap(
         cohort_set.update(key for key in counts if key != "ALL_COHORTS")
         start_count = _to_int(req.get("startCount", 0))
         current_count = resolve_previous_count(progress_map.get(req_id), cohort, start_count)
+        is_custom = _is_explicit_custom_requirement(req)
+        time_only = _resolve_time_only(req, counts) if is_custom else False
         tasks.append(
             TaskItem(
                 id=req_id,
@@ -157,6 +320,8 @@ def format_bootstrap(
                 sort_priority=str(req.get("sortPriority", "")),
                 current_count=current_count,
                 target_count=resolve_target_count(req, cohort),
+                is_custom=is_custom,
+                time_only=time_only,
             )
         )
 

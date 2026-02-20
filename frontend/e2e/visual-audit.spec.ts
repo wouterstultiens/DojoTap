@@ -1,0 +1,98 @@
+import { test } from "@playwright/test";
+
+test("visual baseline capture", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+  });
+
+  await page.route("**/api/bootstrap", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: { display_name: "Wouter", dojo_cohort: "1100-1200" },
+        tasks: [
+          {
+            id: "polgar-m2",
+            name: "Polgar M2s",
+            category: "Mates",
+            counts: { "1100-1200": 500 },
+            start_count: 306,
+            progress_bar_suffix: "",
+            scoreboard_display: "",
+            number_of_cohorts: 1,
+            sort_priority: "1",
+            current_count: 436,
+            target_count: 500,
+          },
+          {
+            id: "study-time",
+            name: "Study Mastering Time In Chess",
+            category: "Study",
+            counts: { "1100-1200": 30 },
+            start_count: 0,
+            progress_bar_suffix: "",
+            scoreboard_display: "",
+            number_of_cohorts: 1,
+            sort_priority: "2",
+            current_count: 4,
+            target_count: 30,
+          },
+          {
+            id: "classical",
+            name: "Classical Games",
+            category: "Play",
+            counts: { "1100-1200": 180 },
+            start_count: 0,
+            progress_bar_suffix: "",
+            scoreboard_display: "",
+            number_of_cohorts: 1,
+            sort_priority: "3",
+            current_count: 61,
+            target_count: 180,
+          },
+        ],
+        progress_by_requirement_id: {},
+        pinned_task_ids: ["polgar-m2", "classical"],
+        available_cohorts: ["1100-1200"],
+        default_filters: { cohort: "ALL" },
+      }),
+    });
+  });
+
+  await page.route("**/api/progress", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        submitted_payload: {
+          cohort: "1100-1200",
+          requirementId: "polgar-m2",
+          previousCount: 436,
+          newCount: 437,
+          incrementalMinutesSpent: 5,
+          date: "2026-02-19T20:00:00Z",
+          notes: "",
+        },
+        upstream_response: { ok: true },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Pinned" }).click();
+
+  await page.screenshot({ path: testInfo.outputPath("01-pinned.png"), fullPage: true });
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.screenshot({ path: testInfo.outputPath("02-settings.png"), fullPage: true });
+
+  await page.getByRole("button", { name: "Pinned" }).click();
+  await page.getByTestId("pinned-task-polgar-m2").click();
+  await page.getByTestId("count-tile-1").waitFor();
+  await page.screenshot({ path: testInfo.outputPath("03-count.png"), fullPage: true });
+
+  await page.getByTestId("count-tile-1").click();
+  await page.getByTestId("time-tile-5").waitFor();
+  await page.screenshot({ path: testInfo.outputPath("04-time.png"), fullPage: true });
+});

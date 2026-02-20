@@ -52,6 +52,28 @@ Then push to `master` or `main`. The workflow publishes the frontend to:
 
 Note: GitHub Pages does not run the FastAPI backend. Deploy backend separately (Render/Railway/Fly/etc.) and set `VITE_API_BASE_URL`.
 
+## Render Backend (Free)
+This repo includes `render.yaml` to deploy the FastAPI backend on Render free tier.
+
+Steps:
+```powershell
+# 1) Push latest code (render.yaml is in repo root)
+git push
+
+# 2) In Render dashboard:
+#    New -> Blueprint
+#    Select this repository
+#    Render reads render.yaml and creates `dojotap-api`
+
+# 3) After first deploy, point frontend at backend
+gh variable set VITE_API_BASE_URL --repo wouterstultiens/DojoTap --body "https://<your-render-service>.onrender.com"
+gh workflow run deploy-pages.yml --repo wouterstultiens/DojoTap
+```
+
+Notes:
+- `ALLOW_ORIGIN` is set to `https://wouterstultiens.github.io` in `render.yaml` (GitHub Pages origin).
+- Free tier has cold starts and ephemeral disk, so persisted login refresh state can be lost between restarts.
+
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.
 

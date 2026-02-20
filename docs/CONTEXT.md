@@ -20,6 +20,7 @@
   - `npm run e2e:smoke` (Playwright mocked API smoke test for frontend tile flow)
 - Deployment:
   - GitHub Pages via `.github/workflows/deploy-pages.yml` (frontend static build only)
+  - Render Blueprint via `render.yaml` (backend FastAPI service on free tier)
 
 ## Strict Constraints
 - Do not store bearer tokens in repo files.
@@ -44,6 +45,7 @@ DojoTap/
   .github/
     workflows/
       deploy-pages.yml # GitHub Actions Pages deployment for frontend/
+  render.yaml          # Render Blueprint for backend web service
   backend/
     app/
       main.py          # FastAPI routes incl. /api/auth/*, /api/health, /api/bootstrap, /api/progress
@@ -115,5 +117,10 @@ DojoTap/
 - Frontend build/runtime endpoint behavior:
   - `VITE_BASE_PATH` controls Vite `base` (needed for project Pages path deploys)
   - `VITE_API_BASE_URL` optionally points frontend API calls at a deployed backend; default remains relative `/api` for local dev proxy
+- Render backend deployment:
+  - service name: `dojotap-api`
+  - health check: `/api/health`
+  - `ALLOW_ORIGIN` must match GitHub Pages origin (`https://wouterstultiens.github.io`)
+  - `LOCAL_AUTH_STATE_PATH` uses `/tmp/...` on Render (ephemeral; may require re-login after cold restart)
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

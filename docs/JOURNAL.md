@@ -1,4 +1,9 @@
 ## [2026-02-20]
+- Done: Added root `render.yaml` Blueprint for free Render backend deployment (`dojotap-api`) with health check and env defaults.
+- Done: Documented Render deploy flow and Pages/backend wiring commands in `README.md` and `docs/CONTEXT.md`.
+- Next: Create Render service via Blueprint, copy live backend URL, set repo variable `VITE_API_BASE_URL`, then redeploy Pages and validate login/progress end-to-end.
+
+## [2026-02-20]
 - Done: Added GitHub Pages workflow (`.github/workflows/deploy-pages.yml`) to build `frontend/` and deploy with Actions.
 - Done: Made frontend deployment-safe by adding `VITE_BASE_PATH` support in Vite and `VITE_API_BASE_URL` support in frontend API calls.
 - Done: Documented `gh` setup for repo creation, Pages deployment, and backend URL variable in `README.md` and `docs/CONTEXT.md`.

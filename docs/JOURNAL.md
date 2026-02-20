@@ -1,4 +1,10 @@
 ## [2026-02-20]
+- Done: Added isolated ChessTempo integration under `backend/integrations/chesstempo` with Playwright CSV fetch, storage-state-first auth flow, and JSON per-day aggregation output.
+- Done: Added parser tests (`backend/tests/test_chesstempo_csv_parser.py`) for aggregation, skipped rows, column fallback, and Europe/Amsterdam day-boundary grouping.
+- Done: Added Render cron service blueprint (`dojotap-chesstempo-csv`) and documented local bootstrap + Render env/runbook in `README.md` and `backend/integrations/chesstempo/README.md`.
+- Next: Run one live local `--init-session` + headless verification, then set Render cron env vars and confirm first scheduled run output.
+
+## [2026-02-20]
 - Done: Reworked mobile-first pinned layout so task tiles start near the top; moved usage copy into a compact `Quick help` disclosure and tightened topbar density.
 - Done: Expanded per-task tile size choices to `Large`, `Medium`, `Small`, and `Very small` (with denser mobile grid behavior).
 - Done: Added stage auto-scroll-to-top behavior and Playwright smoke coverage for iPhone SE viewport density + scroll reset flow.

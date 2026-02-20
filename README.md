@@ -5,7 +5,7 @@ Dark-first, tile-only web app to log ChessDojo progress fast (task tile -> count
 ```powershell
 # 1) Python backend deps
 .\.venv\Scripts\python -m ensurepip --upgrade
-.\.venv\Scripts\python -m pip install fastapi httpx pydantic-settings uvicorn pytest
+.\.venv\Scripts\python -m pip install fastapi httpx pydantic-settings tzdata uvicorn pytest
 
 # 2) Frontend deps
 cd frontend
@@ -73,6 +73,36 @@ gh workflow run deploy-pages.yml --repo wouterstultiens/DojoTap
 Notes:
 - `ALLOW_ORIGIN` is set to `https://wouterstultiens.github.io` in `render.yaml` (GitHub Pages origin).
 - Free tier has cold starts and ephemeral disk, so persisted login refresh state can be lost between restarts.
+
+## ChessTempo CSV Automation (Separate Integration)
+ChessTempo fetch/parsing lives in `backend/integrations/chesstempo/` so it stays isolated from DojoTap app code.
+
+Setup:
+```powershell
+pip install -r backend/integrations/chesstempo/requirements.txt
+python -m playwright install chromium
+```
+
+One-time local bootstrap:
+```powershell
+python -m backend.integrations.chesstempo.fetch_attempts_csv `
+  --stats-url "https://chesstempo.com/stats/woutie70/" `
+  --init-session `
+  --print-storage-state
+```
+
+Copy `CT_STORAGE_STATE_B64=...` from output into Render env vars.
+
+Headless run (local or Render):
+```powershell
+python -m backend.integrations.chesstempo.fetch_attempts_csv --headless --stats-url "$CT_STATS_URL"
+```
+
+Render notes:
+- `render.yaml` includes a separate cron service: `dojotap-chesstempo-csv`.
+- Render cron services require a paid plan (`starter`), not free tier.
+- Set at least: `CT_STATS_URL`, `CT_STORAGE_STATE_B64`.
+- Optional fallback: `CT_USERNAME`, `CT_PASSWORD`.
 
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.

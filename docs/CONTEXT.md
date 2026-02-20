@@ -6,7 +6,9 @@
   - `fastapi`
   - `httpx`
   - `pydantic-settings`
+  - `tzdata`
   - `uvicorn`
+  - `playwright` (only for `backend/integrations/chesstempo` automation)
 - Frontend:
   - Vue `3`
   - Vite `6`
@@ -20,7 +22,9 @@
   - `npm run e2e:smoke` (Playwright mocked API smoke test for frontend tile flow)
 - Deployment:
   - GitHub Pages via `.github/workflows/deploy-pages.yml` (frontend static build only)
-  - Render Blueprint via `render.yaml` (backend FastAPI service on free tier)
+  - Render Blueprint via `render.yaml`:
+    - `dojotap-api` web service (free tier)
+    - `dojotap-chesstempo-csv` cron service (starter tier; scheduled CSV fetch)
 
 ## Strict Constraints
 - Do not store bearer tokens in repo files.
@@ -55,9 +59,15 @@ DojoTap/
       models.py        # API models
     scripts/
       api_smoke.py     # Repeat GET checks against ChessDojo API
+    integrations/
+      chesstempo/
+        fetch_attempts_csv.py # Playwright-based CSV fetch + parse summary JSON
+        requirements.txt      # Integration-only dependency list
+        README.md             # Local bootstrap + Render runbook
     tests/
       test_auth.py     # auth manager token precedence + refresh tests
       test_payloads.py # count math and payload tests
+      test_chesstempo_csv_parser.py # CSV parser and day aggregation tests
   frontend/
     e2e/
       smoke.spec.ts         # mocked API smoke test
@@ -124,5 +134,9 @@ DojoTap/
   - health check: `/api/health`
   - `ALLOW_ORIGIN` must match GitHub Pages origin (`https://wouterstultiens.github.io`)
   - `LOCAL_AUTH_STATE_PATH` uses `/tmp/...` on Render (ephemeral; may require re-login after cold restart)
+- ChessTempo automation conventions:
+  - Keep ChessTempo logic under `backend/integrations/chesstempo` (no coupling to FastAPI route handlers).
+  - Primary auth path is `CT_STORAGE_STATE_B64`; rotate it when sessions expire.
+  - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

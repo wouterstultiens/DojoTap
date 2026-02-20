@@ -12,3 +12,22 @@ services:
         value: https://wouterstultiens.github.io
       - key: LOCAL_AUTH_STATE_PATH
         value: /tmp/dojotap-auth_state.json
+
+  - type: cron
+    name: dojotap-chesstempo-csv
+    runtime: python
+    plan: starter
+    schedule: "0 4 * * *"
+    buildCommand: pip install --upgrade pip && pip install -r backend/integrations/chesstempo/requirements.txt && python -m playwright install chromium
+    startCommand: python -m backend.integrations.chesstempo.fetch_attempts_csv --headless --stats-url "$CT_STATS_URL" --output /tmp/chesstempo/download.csv --summary-output /tmp/chesstempo/summary.json
+    envVars:
+      - key: CT_STATS_URL
+        sync: false
+      - key: CT_STORAGE_STATE_B64
+        sync: false
+      - key: CT_USERNAME
+        sync: false
+      - key: CT_PASSWORD
+        sync: false
+      - key: CT_TIMEZONE
+        value: Europe/Amsterdam

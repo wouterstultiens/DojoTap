@@ -5,7 +5,18 @@
 
 ## Auth
 - Header: `Authorization: Bearer <token>`
-- Token source in this project: local `.env` (`CHESSDOJO_BEARER_TOKEN`)
+- Token sources in this project (priority order):
+  1. Manual override token (`POST /api/auth/manual-token`)
+  2. Local session token from Cognito login (`POST /api/auth/login`)
+  3. Fallback `.env` token (`CHESSDOJO_BEARER_TOKEN`)
+
+### Cognito Login/Refresh (Used by DojoTap Backend)
+- Region: `us-east-1`
+- User Pool Client ID: `1dfi5rar7a2fr5samugigrmise`
+- Hosted UI domain: `auth.chessdojo.club`
+- Flow used for login: Hosted UI OAuth code flow (`/oauth2/authorize` -> `/login` -> `/oauth2/token`)
+- Flow used for refresh: OAuth `grant_type=refresh_token` via `/oauth2/token`
+- Refresh token storage: local machine file (`~/.dojotap/auth_state.json` by default)
 
 ## Endpoints Used
 

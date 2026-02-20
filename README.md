@@ -12,9 +12,9 @@ cd frontend
 npm install
 cd ..
 
-# 3) Configure token
+# 3) Configure environment
 Copy-Item .env.example .env
-# Then set CHESSDOJO_BEARER_TOKEN in .env
+# CHESSDOJO_BEARER_TOKEN is now optional (manual fallback token mode)
 
 # 4) Run backend
 .\.venv\Scripts\python -m uvicorn backend.app.main:app --reload
@@ -30,6 +30,10 @@ npm run e2e:smoke
 ```
 
 Open `http://localhost:5173`.
+
+At first load, if no valid token is available, DojoTap shows a local sign-in screen:
+- preferred: sign in with ChessDojo credentials (backend stores refresh token locally on your machine)
+- fallback: paste a manual bearer token
 
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.
@@ -73,3 +77,4 @@ npm run setup:codex-mcp
 - Vue 3 + Vite + TypeScript (frontend tile UI)
 - Pytest + API smoke script for backend validation
 - Playwright smoke test for frontend flow validation
+- Cognito Hosted UI OAuth login + refresh-token flow for private local token management

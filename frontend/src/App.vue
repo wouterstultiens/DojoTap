@@ -1,7 +1,15 @@
 ﻿<script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
-import { fetchBootstrap, submitProgress } from "./api";
+import {
+  clearManualToken,
+  fetchAuthStatus,
+  fetchBootstrap,
+  loginWithCredentials,
+  logoutAuth,
+  setManualToken,
+  submitProgress,
+} from "./api";
 import {
   COUNT_CAP_OPTIONS,
   DEFAULT_COUNT_CAP,
@@ -14,6 +22,7 @@ import FilterBar from "./components/FilterBar.vue";
 import TaskTile from "./components/TaskTile.vue";
 import TilePicker from "./components/TilePicker.vue";
 import type {
+  AuthStatusResponse,
   BootstrapResponse,
   CountLabelMode,
   TaskItem,
@@ -40,6 +49,14 @@ interface LastSubmissionEntry {
 const bootstrapData = ref<BootstrapResponse | null>(null);
 const loading = ref(false);
 const fetchError = ref("");
+const authRequired = ref(false);
+const authBusy = ref(false);
+const authError = ref("");
+const authStatus = ref<AuthStatusResponse | null>(null);
+const loginUsername = ref("");
+const loginPassword = ref("");
+const rememberRefreshToken = ref(true);
+const manualTokenInput = ref("");
 
 const activeTab = ref<AppTab>("pinned");
 
@@ -309,21 +326,112 @@ function updateTaskCountCap(taskId: string, raw: string): void {
   persistTaskUiPreferences();
 }
 
-async function loadBootstrap(): Promise<void> {
+function isAuthErrorMessage(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("authentication required") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("credentials") ||
+    normalized.includes("sign in")
+  );
+}
+
+async function refreshAuthStatus(): Promise<void> {
+  try {
+    authStatus.value = await fetchAuthStatus();
+    authError.value = "";
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function loadBootstrap(): Promise<boolean> {
   loading.value = true;
   fetchError.value = "";
   try {
     const payload = await fetchBootstrap();
     bootstrapData.value = payload;
+    authRequired.value = false;
     cohortFilter.value = payload.default_filters.cohort || "ALL";
     categoryFilter.value = "ALL";
     searchFilter.value = "";
     loadPins(payload.pinned_task_ids ?? []);
     reconcileTaskUiPreferences(payload.tasks.map((task) => task.id));
+    return true;
   } catch (error) {
+    bootstrapData.value = null;
     fetchError.value = error instanceof Error ? error.message : String(error);
+    if (isAuthErrorMessage(fetchError.value)) {
+      authRequired.value = true;
+      await refreshAuthStatus();
+    }
+    return false;
   } finally {
     loading.value = false;
+  }
+}
+
+async function loginFromCredentials(): Promise<void> {
+  authBusy.value = true;
+  authError.value = "";
+  try {
+    authStatus.value = await loginWithCredentials({
+      username: loginUsername.value.trim(),
+      password: loginPassword.value,
+      persist_refresh_token: rememberRefreshToken.value,
+    });
+    loginPassword.value = "";
+    if (authStatus.value.authenticated) {
+      await loadBootstrap();
+    }
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    authBusy.value = false;
+  }
+}
+
+async function applyManualToken(): Promise<void> {
+  authBusy.value = true;
+  authError.value = "";
+  try {
+    authStatus.value = await setManualToken({ token: manualTokenInput.value });
+    manualTokenInput.value = "";
+    if (authStatus.value.authenticated) {
+      await loadBootstrap();
+    }
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    authBusy.value = false;
+  }
+}
+
+async function clearManualTokenOverride(): Promise<void> {
+  authBusy.value = true;
+  authError.value = "";
+  try {
+    authStatus.value = await clearManualToken();
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    authBusy.value = false;
+  }
+}
+
+async function signOut(): Promise<void> {
+  authBusy.value = true;
+  authError.value = "";
+  try {
+    authStatus.value = await logoutAuth();
+    bootstrapData.value = null;
+    fetchError.value = "";
+    authRequired.value = true;
+    resetFlow();
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    authBusy.value = false;
   }
 }
 
@@ -370,6 +478,23 @@ function isTaskCompleted(task: TaskItem): boolean {
 const completedPinnedCount = computed(() =>
   pinnedTasks.value.filter((task) => isTaskCompleted(task)).length
 );
+const authModeLabel = computed(() => {
+  if (!authStatus.value) {
+    return bootstrapData.value ? "Active" : "Signed out";
+  }
+  const mode = authStatus.value?.auth_mode ?? "none";
+  if (mode === "session") {
+    return "Session";
+  }
+  if (mode === "manual") {
+    return "Manual token";
+  }
+  if (mode === "env") {
+    return ".env token";
+  }
+  return "Signed out";
+});
+const hasManualOverride = computed(() => authStatus.value?.auth_mode === "manual");
 
 const userDisplayName = computed(() => bootstrapData.value?.user.display_name?.trim() || "Dojo Member");
 const userCohort = computed(() => bootstrapData.value?.user.dojo_cohort ?? "");
@@ -608,7 +733,7 @@ watch(activeTab, (value) => {
 
 restoreTabPreference();
 loadTaskUiPreferences();
-loadBootstrap();
+void loadBootstrap();
 </script>
 
 <template>
@@ -620,12 +745,14 @@ loadBootstrap();
       </div>
 
       <div class="topbar-right">
-        <div v-if="bootstrapData" class="status-strip">
-          <span class="status-chip">{{ userDisplayName }}</span>
-          <span class="status-chip">{{ pinnedTasks.length }} pinned</span>
-          <span class="status-chip">{{ completedPinnedCount }} completed</span>
+        <div v-if="bootstrapData || authStatus" class="status-strip">
+          <span v-if="bootstrapData" class="status-chip">{{ userDisplayName }}</span>
+          <span v-if="bootstrapData" class="status-chip">{{ pinnedTasks.length }} pinned</span>
+          <span v-if="bootstrapData" class="status-chip">{{ completedPinnedCount }} completed</span>
+          <span class="status-chip">Auth: {{ authModeLabel }}</span>
+          <span v-if="authStatus?.has_refresh_token" class="status-chip">refresh saved</span>
         </div>
-        <nav class="tab-nav" aria-label="Primary tabs">
+        <nav v-if="bootstrapData" class="tab-nav" aria-label="Primary tabs">
           <button
             type="button"
             class="tab-btn"
@@ -643,13 +770,91 @@ loadBootstrap();
             Settings
           </button>
         </nav>
+        <button
+          v-if="bootstrapData || authStatus?.authenticated"
+          type="button"
+          class="ghost-btn signout-btn"
+          :disabled="authBusy"
+          @click="signOut"
+        >
+          Sign out
+        </button>
       </div>
     </header>
 
-    <p v-if="fetchError" class="notice error">{{ fetchError }}</p>
-    <p v-if="loading" class="notice">Loading tasks...</p>
+    <p v-if="fetchError && !authRequired" class="notice error">{{ fetchError }}</p>
+    <p v-if="loading && !authRequired" class="notice">Loading tasks...</p>
 
-    <main v-if="bootstrapData" class="main-view" :class="{ busy: submitting }">
+    <main v-if="authRequired" class="main-view auth-view">
+      <section class="auth-card">
+        <h2>Sign in</h2>
+        <p class="auth-copy">
+          DojoTap is running in private mode. Sign in to fetch a fresh bearer token locally.
+        </p>
+        <p v-if="authStatus?.username" class="auth-copy">Saved account: {{ authStatus.username }}</p>
+        <p v-if="authError" class="notice error">{{ authError }}</p>
+
+        <form class="auth-form" @submit.prevent="loginFromCredentials">
+          <label>
+            ChessDojo email
+            <input v-model.trim="loginUsername" type="email" autocomplete="username" required />
+          </label>
+
+          <label>
+            Password
+            <input
+              v-model="loginPassword"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+
+          <label class="check-wrap auth-check-wrap">
+            <input v-model="rememberRefreshToken" type="checkbox" />
+            Save refresh token on this machine
+          </label>
+
+          <button type="submit" class="ghost-btn" :disabled="authBusy">
+            {{ authBusy ? "Signing in..." : "Sign in" }}
+          </button>
+        </form>
+
+        <div class="auth-divider">or</div>
+
+        <form class="auth-form" @submit.prevent="applyManualToken">
+          <label>
+            Manual bearer token (fallback)
+            <input
+              v-model.trim="manualTokenInput"
+              type="password"
+              placeholder="Paste token or Bearer token"
+              autocomplete="off"
+              required
+            />
+          </label>
+          <div class="auth-actions">
+            <button type="submit" class="ghost-btn" :disabled="authBusy">
+              {{ authBusy ? "Applying..." : "Use manual token" }}
+            </button>
+            <button
+              v-if="hasManualOverride"
+              type="button"
+              class="ghost-btn"
+              :disabled="authBusy"
+              @click="clearManualTokenOverride"
+            >
+              Clear manual token
+            </button>
+            <button type="button" class="ghost-btn" :disabled="authBusy" @click="refreshAuthStatus">
+              Refresh status
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <main v-else-if="bootstrapData" class="main-view" :class="{ busy: submitting }">
       <section v-if="activeTab === 'pinned'" class="pane pinned-pane">
         <Transition name="stage" mode="out-in">
           <div v-if="flowStage === 'task'" key="task" class="stage-wrap task-stage">

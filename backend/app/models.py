@@ -48,3 +48,20 @@ class HealthResponse(BaseModel):
     ok: bool
     token_configured: bool
     upstream_reachable: bool
+
+
+class AuthStatusResponse(BaseModel):
+    authenticated: bool
+    auth_mode: str
+    has_refresh_token: bool
+    username: str | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    persist_refresh_token: bool = True
+
+
+class ManualTokenRequest(BaseModel):
+    token: str = Field(min_length=1)

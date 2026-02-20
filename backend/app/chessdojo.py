@@ -11,12 +11,14 @@ from .models import BootstrapResponse, TaskItem, UserInfo
 
 
 class ChessDojoClient:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, bearer_token: str | None = None):
         self._settings = settings
+        self._bearer_token = (bearer_token or "").strip()
 
     @property
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._settings.normalized_bearer_token()}"}
+        bearer_token = self._bearer_token or self._settings.normalized_bearer_token()
+        return {"Authorization": f"Bearer {bearer_token}"}
 
     async def fetch_user(self) -> dict[str, Any]:
         return await self._get_json("/user")
@@ -196,7 +198,21 @@ def _resolve_time_only(raw: dict[str, Any], counts: dict[str, int]) -> bool:
     if tracking_mode in {"count_and_time", "count"}:
         return False
 
-    return not any(value > 0 for value in counts.values())
+    progress_suffix = _first_non_empty_str(
+        raw, ["progressBarSuffix", "progress_bar_suffix"]
+    ).lower()
+    if progress_suffix:
+        # Custom tasks often omit explicit mode flags; a time-unit suffix is the
+        # strongest available hint for timer-only flow.
+        if any(token in progress_suffix for token in ("minute", "min", "hour", "time")):
+            return True
+        return False
+
+    if any(value > 0 for value in counts.values()):
+        return False
+
+    # Default to count+time when the payload is ambiguous to avoid losing count input.
+    return False
 
 
 def _build_custom_requirement(raw: dict[str, Any]) -> dict[str, Any] | None:

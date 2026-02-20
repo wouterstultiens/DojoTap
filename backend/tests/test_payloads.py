@@ -82,3 +82,39 @@ def test_merge_requirements_includes_custom_tasks_from_access_payload() -> None:
     custom = next(item for item in merged if item["id"] == "custom-1")
     assert custom["isCustomRequirement"] is True
     assert custom["timeOnly"] is True
+
+
+def test_merge_requirements_infers_time_only_from_minutes_suffix() -> None:
+    custom_access_payload = {
+        "customTasks": [
+            {
+                "id": "custom-minutes",
+                "name": "Custom Minutes Task",
+                "category": "Custom",
+                "counts": {"1100-1200": 0},
+                "progressBarSuffix": "Minutes",
+            }
+        ]
+    }
+
+    merged = merge_requirements([], custom_access_payload)
+    assert len(merged) == 1
+    assert merged[0]["timeOnly"] is True
+
+
+def test_merge_requirements_defaults_ambiguous_custom_task_to_count_and_time() -> None:
+    custom_access_payload = {
+        "customTasks": [
+            {
+                "id": "custom-ambiguous",
+                "name": "Custom Ambiguous Task",
+                "category": "Custom",
+                "counts": {"1100-1200": 0},
+                "progressBarSuffix": "",
+            }
+        ]
+    }
+
+    merged = merge_requirements([], custom_access_payload)
+    assert len(merged) == 1
+    assert merged[0]["timeOnly"] is False

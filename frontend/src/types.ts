@@ -57,3 +57,20 @@ export interface TaskUiPreferences {
   tile_size: TileSizeMode;
   count_cap: number;
 }
+
+export interface AuthStatusResponse {
+  authenticated: boolean;
+  auth_mode: string;
+  has_refresh_token: boolean;
+  username: string | null;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+  persist_refresh_token: boolean;
+}
+
+export interface ManualTokenRequest {
+  token: string;
+}

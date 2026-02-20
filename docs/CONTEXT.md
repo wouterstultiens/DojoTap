@@ -21,7 +21,9 @@
 
 ## Strict Constraints
 - Do not store bearer tokens in repo files.
-- Token must be read from local `.env` (`CHESSDOJO_BEARER_TOKEN`).
+- Use private/local auth only (no multi-user hosted auth in v1).
+- Preferred auth flow is local ChessDojo credential login via Cognito Hosted UI OAuth (code + refresh grant) and backend session refresh token storage.
+- `.env` token (`CHESSDOJO_BEARER_TOKEN`) remains a fallback/manual override path only.
 - v1 supports adding progress only via `POST /user/progress/v3`.
 - No delete automation in v1.
 - Keep tile-first UX: no typing for count/minutes in normal flow.
@@ -39,13 +41,15 @@
 DojoTap/
   backend/
     app/
-      main.py          # FastAPI routes: /api/health, /api/bootstrap, /api/progress
+      main.py          # FastAPI routes incl. /api/auth/*, /api/health, /api/bootstrap, /api/progress
+      auth.py          # local Cognito login + refresh-token persistence + manual token override
       chessdojo.py     # Upstream client + payload math + bootstrap formatting
       config.py        # Environment settings
       models.py        # API models
     scripts/
       api_smoke.py     # Repeat GET checks against ChessDojo API
     tests/
+      test_auth.py     # auth manager token precedence + refresh tests
       test_payloads.py # count math and payload tests
   frontend/
     e2e/
@@ -90,6 +94,11 @@ DojoTap/
     - failure: remains on minutes stage so the user can retry immediately
 - `Settings` tab owns filters/search and pin management (inline pin/unpin actions).
 - Backend bootstrap merges standard requirements with custom task access payload (`/user/access/v2`).
+- Backend auth model:
+  - `POST /api/auth/login` performs Cognito Hosted UI OAuth login (`/oauth2/authorize` + `/login` + `/oauth2/token`)
+  - refresh uses OAuth `grant_type=refresh_token` automatically before expiry and once after upstream 401
+  - refresh token is persisted locally (`~/.dojotap/auth_state.json` by default)
+  - manual token fallback via `/api/auth/manual-token`
 - Settings task cards own per-task overrides:
   - count label mode (`+N` or absolute current+increment)
   - tile size (`small` or `large`)

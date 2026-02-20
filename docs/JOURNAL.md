@@ -1,4 +1,37 @@
 ## [2026-02-20]
+- Done: Investigated custom task mode detection using live `/user/access/v2` payload and confirmed custom tasks arrive with zeroed `counts` and no explicit time/count mode flags.
+- Done: Fixed custom-task `timeOnly` inference to use explicit flags first, then `progressBarSuffix` (e.g. `Minutes`) as a timer-only hint, and default ambiguous tasks to count+time.
+- Done: Added regression tests for `Minutes` suffix detection and ambiguous zero-count custom-task fallback behavior (`backend/tests/test_payloads.py`).
+- Next: Reload frontend and validate that `Study Preventing Blunders in Chess` now shows count + time while `ChessTempo Simple Tactics` remains time-only.
+
+## [2026-02-20]
+- Done: Migrated backend website login flow (`POST /api/auth/login`) from Cognito `USER_PASSWORD_AUTH` to Hosted UI OAuth (authorize/login/token exchange).
+- Done: Migrated backend refresh path to OAuth `grant_type=refresh_token` token exchange.
+- Done: Removed standalone `backend/scripts/fetch_auth_token.py` and folded that behavior into the website auth flow.
+- Done: Updated auth tests + docs (`README`, `CONTEXT`, `API_NOTES`) to reflect OAuth-based login/refresh.
+- Next: Verify frontend login UX against a real account that requires/does not require MFA and decide if explicit MFA UI messaging is needed.
+
+## [2026-02-20]
+- Done: Reworked `backend/scripts/fetch_auth_token.py` to use Cognito Hosted UI OAuth code flow (`auth.chessdojo.club`) instead of direct `USER_PASSWORD_AUTH`.
+- Done: Added login-form parsing + explicit Cognito login error extraction so credential failures return actionable messages.
+- Done: Kept local refresh-token persistence format compatible with DojoTap (`~/.dojotap/auth_state.json` by default).
+- Next: Decide whether backend `/api/auth/login` should be migrated from `USER_PASSWORD_AUTH` to the same Hosted UI flow for consistency.
+
+## [2026-02-20]
+- Done: Added `backend/scripts/fetch_auth_token.py` to authenticate with ChessDojo credentials and print a usable bearer token (`raw` or `Bearer ...` format).
+- Done: Reused existing local auth manager flow so the script supports refresh-token persistence and existing env/config defaults.
+- Done: Documented CLI usage in `README.md` and added the script to `docs/CONTEXT.md`.
+- Next: Add focused tests for CLI argument/env resolution in `fetch_auth_token.py` (username/password fallback and no-prompt behavior).
+
+## [2026-02-20]
+- Done: Replaced env-only auth with local private auth flow (`/api/auth/login`, `/api/auth/status`, `/api/auth/logout`, manual token override endpoints).
+- Done: Added backend local auth manager with Cognito `InitiateAuth` login + refresh (`REFRESH_TOKEN_AUTH`) and persistent local refresh token file support.
+- Done: Wired automatic token refresh before expiry and one forced refresh retry after upstream `401` for bootstrap/progress calls.
+- Done: Added frontend auth gate UI (credential login + manual token fallback) that appears when bootstrap auth is missing/invalid.
+- Done: Added backend auth unit tests and re-verified via `pytest backend/tests`, `npm run build`, and `npm run e2e:smoke`.
+- Next: Add per-task override reset controls (single-task reset + reset-all) now that auth flow is stabilized.
+
+## [2026-02-20]
 - Done: Added custom task retrieval merge (`GET /user/access/v2`) so bootstrap and submit lookup include user custom tasks.
 - Done: Added time-only task flow support (skip count stage, submit with `count_increment: 0`, timer tiles only).
 - Done: Replaced global defaults panel with per-task count-cap control (`1..200`) as the third task-card setting.

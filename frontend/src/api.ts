@@ -1,5 +1,8 @@
 import type {
+  AuthStatusResponse,
   BootstrapResponse,
+  LoginRequest,
+  ManualTokenRequest,
   SubmitProgressRequest,
   SubmitProgressResponse,
 } from "./types";
@@ -24,6 +27,54 @@ export async function fetchBootstrap(): Promise<BootstrapResponse> {
   return (await response.json()) as BootstrapResponse;
 }
 
+export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
+  const response = await fetch("/api/auth/status");
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+  return (await response.json()) as AuthStatusResponse;
+}
+
+export async function loginWithCredentials(payload: LoginRequest): Promise<AuthStatusResponse> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+  return (await response.json()) as AuthStatusResponse;
+}
+
+export async function logoutAuth(): Promise<AuthStatusResponse> {
+  const response = await fetch("/api/auth/logout", { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+  return (await response.json()) as AuthStatusResponse;
+}
+
+export async function setManualToken(payload: ManualTokenRequest): Promise<AuthStatusResponse> {
+  const response = await fetch("/api/auth/manual-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+  return (await response.json()) as AuthStatusResponse;
+}
+
+export async function clearManualToken(): Promise<AuthStatusResponse> {
+  const response = await fetch("/api/auth/manual-token", { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+  return (await response.json()) as AuthStatusResponse;
+}
+
 export async function submitProgress(
   payload: SubmitProgressRequest
 ): Promise<SubmitProgressResponse> {
@@ -38,4 +89,3 @@ export async function submitProgress(
   }
   return (await response.json()) as SubmitProgressResponse;
 }
-

@@ -18,6 +18,8 @@
   - `backend/scripts/api_smoke.py` for repeated non-destructive API validation
   - `npm run build` (Vue type-check + production build) for frontend validation
   - `npm run e2e:smoke` (Playwright mocked API smoke test for frontend tile flow)
+- Deployment:
+  - GitHub Pages via `.github/workflows/deploy-pages.yml` (frontend static build only)
 
 ## Strict Constraints
 - Do not store bearer tokens in repo files.
@@ -39,6 +41,9 @@
 ## Project Structure
 ```text
 DojoTap/
+  .github/
+    workflows/
+      deploy-pages.yml # GitHub Actions Pages deployment for frontend/
   backend/
     app/
       main.py          # FastAPI routes incl. /api/auth/*, /api/health, /api/bootstrap, /api/progress
@@ -107,5 +112,8 @@ DojoTap/
 - Pinned task state is local (`localStorage`) and initialized from server pins.
 - Per-task UI preferences are persisted in localStorage.
 - Frontend dependency install should auto-provision Playwright MCP config via `frontend/scripts/ensure-codex-playwright-mcp.mjs` (idempotent).
+- Frontend build/runtime endpoint behavior:
+  - `VITE_BASE_PATH` controls Vite `base` (needed for project Pages path deploys)
+  - `VITE_API_BASE_URL` optionally points frontend API calls at a deployed backend; default remains relative `/api` for local dev proxy
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

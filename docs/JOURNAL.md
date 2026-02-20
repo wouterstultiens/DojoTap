@@ -1,4 +1,10 @@
 ## [2026-02-20]
+- Done: Added GitHub Pages workflow (`.github/workflows/deploy-pages.yml`) to build `frontend/` and deploy with Actions.
+- Done: Made frontend deployment-safe by adding `VITE_BASE_PATH` support in Vite and `VITE_API_BASE_URL` support in frontend API calls.
+- Done: Documented `gh` setup for repo creation, Pages deployment, and backend URL variable in `README.md` and `docs/CONTEXT.md`.
+- Next: Create/set a hosted backend URL, save it as repository variable `VITE_API_BASE_URL`, and validate auth/progress flow from the live Pages URL.
+
+## [2026-02-20]
 - Done: Investigated custom task mode detection using live `/user/access/v2` payload and confirmed custom tasks arrive with zeroed `counts` and no explicit time/count mode flags.
 - Done: Fixed custom-task `timeOnly` inference to use explicit flags first, then `progressBarSuffix` (e.g. `Minutes`) as a timer-only hint, and default ambiguous tasks to count+time.
 - Done: Added regression tests for `Minutes` suffix detection and ambiguous zero-count custom-task fallback behavior (`backend/tests/test_payloads.py`).

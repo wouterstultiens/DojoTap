@@ -35,6 +35,23 @@ At first load, if no valid token is available, DojoTap shows a local sign-in scr
 - preferred: sign in with ChessDojo credentials (backend stores refresh token locally on your machine)
 - fallback: paste a manual bearer token
 
+## GitHub Pages
+The repo includes `.github/workflows/deploy-pages.yml` to deploy the Vue frontend from `frontend/` to GitHub Pages.
+
+Setup:
+```powershell
+# Create and push repo once
+gh repo create DojoTap --public --source . --remote origin --push
+
+# Set backend URL used by the deployed frontend
+gh variable set VITE_API_BASE_URL --body "https://<your-backend-host>"
+```
+
+Then push to `master` or `main`. The workflow publishes the frontend to:
+- `https://<github-user>.github.io/DojoTap/` (project Pages path)
+
+Note: GitHub Pages does not run the FastAPI backend. Deploy backend separately (Render/Railway/Fly/etc.) and set `VITE_API_BASE_URL`.
+
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.
 

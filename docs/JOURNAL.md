@@ -1,4 +1,10 @@
 ## [2026-02-20]
+- Done: Reworked mobile-first pinned layout so task tiles start near the top; moved usage copy into a compact `Quick help` disclosure and tightened topbar density.
+- Done: Expanded per-task tile size choices to `Large`, `Medium`, `Small`, and `Very small` (with denser mobile grid behavior).
+- Done: Added stage auto-scroll-to-top behavior and Playwright smoke coverage for iPhone SE viewport density + scroll reset flow.
+- Next: Run one live-device sanity pass on iPhone SE/mini Safari and tune `very-small` tap targets if any accidental taps show up.
+
+## [2026-02-20]
 - Done: Added root `render.yaml` Blueprint for free Render backend deployment (`dojotap-api`) with health check and env defaults.
 - Done: Documented Render deploy flow and Pages/backend wiring commands in `README.md` and `docs/CONTEXT.md`.
 - Next: Create Render service via Blueprint, copy live backend URL, set repo variable `VITE_API_BASE_URL`, then redeploy Pages and validate login/progress end-to-end.

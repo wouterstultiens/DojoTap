@@ -108,9 +108,11 @@ DojoTap/
   - manual token fallback via `/api/auth/manual-token`
 - Settings task cards own per-task overrides:
   - count label mode (`+N` or absolute current+increment)
-  - tile size (`small` or `large`)
+  - tile size (`very-small`, `small`, `medium`, or `large`)
 - count cap (`1..200`) as the third task-card setting
 - Settings filters include `Pinned` and `Hide completed` toggles.
+- Pinned tab keeps task tiles at the top of the screen; guidance is tucked into a compact `Quick help` disclosure.
+- Stage transitions (task -> count -> time and back) auto-scroll viewport to top for mobile consistency.
 - Pinned task state is local (`localStorage`) and initialized from server pins.
 - Per-task UI preferences are persisted in localStorage.
 - Frontend dependency install should auto-provision Playwright MCP config via `frontend/scripts/ensure-codex-playwright-mcp.mjs` (idempotent).

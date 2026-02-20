@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import {
   clearManualToken,
@@ -103,7 +103,7 @@ function sanitizeCountLabelMode(raw: unknown): CountLabelMode | null {
 }
 
 function sanitizeTileSizeMode(raw: unknown): TileSizeMode | null {
-  if (raw === "small" || raw === "large") {
+  if (raw === "very-small" || raw === "small" || raw === "medium" || raw === "large") {
     return raw;
   }
   return null;
@@ -210,6 +210,11 @@ function dismissToast(): void {
     toastTimer = null;
   }
   toast.value.visible = false;
+}
+
+async function scrollViewportToTop(): Promise<void> {
+  await nextTick();
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
 function resetFlow(): void {
@@ -728,7 +733,13 @@ watch(activeTab, (value) => {
   localStorage.setItem(TAB_STORAGE_KEY, value);
   if (value === "settings") {
     resetFlow();
+    return;
   }
+  void scrollViewportToTop();
+});
+
+watch(flowStage, () => {
+  void scrollViewportToTop();
 });
 
 restoreTabPreference();
@@ -746,11 +757,11 @@ void loadBootstrap();
 
       <div class="topbar-right">
         <div v-if="bootstrapData || authStatus" class="status-strip">
-          <span v-if="bootstrapData" class="status-chip">{{ userDisplayName }}</span>
-          <span v-if="bootstrapData" class="status-chip">{{ pinnedTasks.length }} pinned</span>
-          <span v-if="bootstrapData" class="status-chip">{{ completedPinnedCount }} completed</span>
-          <span class="status-chip">Auth: {{ authModeLabel }}</span>
-          <span v-if="authStatus?.has_refresh_token" class="status-chip">refresh saved</span>
+          <span v-if="bootstrapData" class="status-chip chip-user">{{ userDisplayName }}</span>
+          <span v-if="bootstrapData" class="status-chip chip-pinned">{{ pinnedTasks.length }} pinned</span>
+          <span v-if="bootstrapData" class="status-chip chip-completed">{{ completedPinnedCount }} completed</span>
+          <span class="status-chip chip-auth">Auth: {{ authModeLabel }}</span>
+          <span v-if="authStatus?.has_refresh_token" class="status-chip chip-refresh">refresh saved</span>
         </div>
         <nav v-if="bootstrapData" class="tab-nav" aria-label="Primary tabs">
           <button
@@ -858,20 +869,6 @@ void loadBootstrap();
       <section v-if="activeTab === 'pinned'" class="pane pinned-pane">
         <Transition name="stage" mode="out-in">
           <div v-if="flowStage === 'task'" key="task" class="stage-wrap task-stage">
-            <section class="quick-rail">
-              <h2>Quick Log</h2>
-              <p>Choose a pinned task, then tap count and time (or time only for timer tasks).</p>
-              <p v-if="lastSubmission" class="last-log">
-                Last: <strong>{{ lastSubmission.task_name }}</strong>
-                <template v-if="lastSubmission.count_increment > 0">
-                  +{{ lastSubmission.count_increment }}
-                </template>
-                <template v-else>time only</template>
-                in {{ formatMinuteLabel(lastSubmission.minutes_spent) }}
-                at {{ formatLoggedAt(lastSubmission.logged_at) }}
-              </p>
-            </section>
-
             <p v-if="pinnedTasks.length === 0" class="empty-state">
               No pinned tasks yet. Open Settings to pin what you want here.
             </p>
@@ -889,6 +886,20 @@ void loadBootstrap();
                 @select="startLogFlow"
               />
             </div>
+
+            <details v-if="pinnedTasks.length > 0 || lastSubmission" class="quick-help">
+              <summary>Quick help</summary>
+              <p>Tap task -> count -> time. Timer-only tasks skip the count step.</p>
+              <p v-if="lastSubmission" class="last-log">
+                Last: <strong>{{ lastSubmission.task_name }}</strong>
+                <template v-if="lastSubmission.count_increment > 0">
+                  +{{ lastSubmission.count_increment }}
+                </template>
+                <template v-else>time only</template>
+                in {{ formatMinuteLabel(lastSubmission.minutes_spent) }}
+                at {{ formatLoggedAt(lastSubmission.logged_at) }}
+              </p>
+            </details>
           </div>
 
           <div v-else-if="flowStage === 'count'" key="count" class="stage-wrap">

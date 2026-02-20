@@ -337,3 +337,97 @@ test("smoke: custom time-only task skips count and submits zero increment", asyn
     minutes_spent: 10,
   });
 });
+
+test("smoke: mobile very-small tiles are dense and stage changes scroll to top", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+
+  await page.route("**/api/bootstrap", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: {
+          display_name: "Wouter",
+          dojo_cohort: "1100-1200",
+        },
+        tasks: [
+          {
+            id: "mobile-polgar",
+            name: "Polgar M2s",
+            category: "Mates",
+            counts: { "1100-1200": 500 },
+            start_count: 306,
+            progress_bar_suffix: "",
+            scoreboard_display: "",
+            number_of_cohorts: 1,
+            sort_priority: "1",
+            current_count: 436,
+            target_count: 500,
+            is_custom: false,
+            time_only: false,
+          },
+        ],
+        progress_by_requirement_id: {},
+        pinned_task_ids: ["mobile-polgar"],
+        available_cohorts: ["1100-1200"],
+        default_filters: {
+          cohort: "ALL",
+        },
+      }),
+    });
+  });
+
+  await page.route("**/api/progress", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        submitted_payload: {
+          cohort: "1100-1200",
+          requirementId: "mobile-polgar",
+          previousCount: 436,
+          newCount: 437,
+          incrementalMinutesSpent: 5,
+          date: "2026-02-20T20:00:00Z",
+          notes: "",
+        },
+        upstream_response: { ok: true },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByTestId("tile-size-mobile-polgar").selectOption("very-small");
+  await page.getByRole("button", { name: "Pinned" }).click();
+
+  await page.evaluate(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
+  });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+  await page.getByTestId("pinned-task-mobile-polgar").click();
+  await page.getByTestId("count-tile-1").waitFor();
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(0);
+
+  const columns = await page.locator(".tile-grid .input-tile").evaluateAll((elements) => {
+    const tops = elements.map((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().top)
+    );
+    const firstRowTop = Math.min(...tops);
+    const firstRowElements = elements.filter(
+      (_element, index) => Math.abs(tops[index] - firstRowTop) <= 2
+    );
+    const uniqueLefts = new Set(
+      firstRowElements.map((element) =>
+        Math.round((element as HTMLElement).getBoundingClientRect().left)
+      )
+    );
+    return uniqueLefts.size;
+  });
+  expect(columns).toBeGreaterThanOrEqual(4);
+
+  await page.getByTestId("count-tile-1").click();
+  await page.getByTestId("time-tile-5").waitFor();
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(0);
+});

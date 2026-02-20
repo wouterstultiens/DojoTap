@@ -98,7 +98,9 @@ function progressLabel(task: TaskItem): string {
           "
         >
           <option value="large">Large</option>
+          <option value="medium">Medium</option>
           <option value="small">Small</option>
+          <option value="very-small">Very small</option>
         </select>
       </label>
 

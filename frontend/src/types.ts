@@ -1,7 +1,7 @@
 export type ProgressMap = Record<string, Record<string, unknown>>;
 
 export type CountLabelMode = "increment" | "absolute";
-export type TileSizeMode = "small" | "large";
+export type TileSizeMode = "very-small" | "small" | "medium" | "large";
 
 export interface UserInfo {
   display_name: string;

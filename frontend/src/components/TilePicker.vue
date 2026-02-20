@@ -10,7 +10,7 @@ const props = withDefaults(
   subtitle: string;
   options: TileOption[];
   emptyMessage?: string;
-  tileSize?: "small" | "large";
+  tileSize?: "very-small" | "small" | "medium" | "large";
 }>(),
   {
     tileSize: "large",
@@ -37,7 +37,7 @@ const emit = defineEmits<{
     <div
       v-if="options.length > 0"
       class="tile-grid"
-      :class="props.tileSize === 'small' ? 'size-small' : 'size-large'"
+      :class="`size-${props.tileSize}`"
     >
       <button
         v-for="option in options"

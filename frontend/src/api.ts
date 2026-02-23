@@ -7,6 +7,7 @@ import type {
   SubmitProgressRequest,
   SubmitProgressResponse,
 } from "./types";
+import { logPoint, timeAsync, timeSync } from "./diagnostics";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 const SESSION_HEADER_NAME = "X-DojoTap-Session";
@@ -19,18 +20,22 @@ function apiUrl(path: string): string {
 const BOOTSTRAP_TIMEOUT_MS = 10_000;
 
 function readSessionFallbackId(): string {
-  return localStorage.getItem(SESSION_STORAGE_KEY)?.trim() ?? "";
+  return timeSync("storage.session.read", () => localStorage.getItem(SESSION_STORAGE_KEY)?.trim() ?? "");
 }
 
 function persistSessionFallbackId(response: Response): void {
   const sessionId = response.headers.get(SESSION_HEADER_NAME)?.trim() ?? "";
   if (sessionId) {
-    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    timeSync("storage.session.persist", () => {
+      localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    });
   }
 }
 
 function clearSessionFallbackId(): void {
-  localStorage.removeItem(SESSION_STORAGE_KEY);
+  timeSync("storage.session.clear", () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  });
 }
 
 function withSessionFallbackHeader(headersInit?: HeadersInit): Headers {
@@ -60,15 +65,17 @@ export class BootstrapTimeoutError extends Error {
 }
 
 async function parseApiError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { detail?: string };
-    if (payload.detail) {
-      return payload.detail;
+  return timeAsync("api.parseApiError", async () => {
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        return payload.detail;
+      }
+    } catch {
+      // ignore parse errors and return status text fallback
     }
-  } catch {
-    // ignore parse errors and return status text fallback
-  }
-  return `${response.status} ${response.statusText}`;
+    return `${response.status} ${response.statusText}`;
+  });
 }
 
 async function assertOk(response: Response): Promise<void> {
@@ -77,91 +84,119 @@ async function assertOk(response: Response): Promise<void> {
   }
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  await assertOk(response);
-  return (await response.json()) as T;
+async function parseJsonResponse<T>(response: Response, context: string): Promise<T> {
+  return timeAsync(`api.parseJson.${context}`, async () => {
+    await assertOk(response);
+    return (await response.json()) as T;
+  }, { status: response.status });
 }
 
 export async function fetchBootstrap(): Promise<BootstrapResponse> {
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), BOOTSTRAP_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(apiUrl("/api/bootstrap"), {
-      signal: abortController.signal,
-      credentials: "include",
-      headers: withSessionFallbackHeader(),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new BootstrapTimeoutError(BOOTSTRAP_TIMEOUT_MS);
+  return timeAsync("api.fetchBootstrap", async () => {
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), BOOTSTRAP_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(apiUrl("/api/bootstrap"), {
+        signal: abortController.signal,
+        credentials: "include",
+        headers: withSessionFallbackHeader(),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        logPoint("api.fetchBootstrap.timeout", { timeoutMs: BOOTSTRAP_TIMEOUT_MS });
+        throw new BootstrapTimeoutError(BOOTSTRAP_TIMEOUT_MS);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 
-  return parseJsonResponse<BootstrapResponse>(response);
+    return parseJsonResponse<BootstrapResponse>(response, "fetchBootstrap");
+  }, { timeoutMs: BOOTSTRAP_TIMEOUT_MS });
 }
 
 export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
-  const response = await fetch(apiUrl("/api/auth/status"), {
-    credentials: "include",
-    headers: withSessionFallbackHeader(),
+  return timeAsync("api.fetchAuthStatus", async () => {
+    const response = await fetch(apiUrl("/api/auth/status"), {
+      credentials: "include",
+      headers: withSessionFallbackHeader(),
+    });
+    return parseJsonResponse<AuthStatusResponse>(response, "fetchAuthStatus");
   });
-  return parseJsonResponse<AuthStatusResponse>(response);
 }
 
 export async function loginWithCredentials(payload: LoginRequest): Promise<AuthStatusResponse> {
-  const response = await fetch(apiUrl("/api/auth/login"), {
-    method: "POST",
-    credentials: "include",
-    headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
-    body: JSON.stringify(payload),
+  return timeAsync("api.loginWithCredentials", async () => {
+    const response = await fetch(apiUrl("/api/auth/login"), {
+      method: "POST",
+      credentials: "include",
+      headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    persistSessionFallbackId(response);
+    return parseJsonResponse<AuthStatusResponse>(response, "loginWithCredentials");
+  }, {
+    persistRefreshToken: payload.persist_refresh_token,
+    emailLength: payload.email.length,
   });
-  persistSessionFallbackId(response);
-  return parseJsonResponse<AuthStatusResponse>(response);
 }
 
 export async function logoutAuth(): Promise<AuthStatusResponse> {
-  const response = await fetch(apiUrl("/api/auth/logout"), {
-    method: "POST",
-    credentials: "include",
-    headers: withSessionFallbackHeader(),
+  return timeAsync("api.logoutAuth", async () => {
+    const response = await fetch(apiUrl("/api/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+      headers: withSessionFallbackHeader(),
+    });
+    const parsed = await parseJsonResponse<AuthStatusResponse>(response, "logoutAuth");
+    clearSessionFallbackId();
+    return parsed;
   });
-  const parsed = await parseJsonResponse<AuthStatusResponse>(response);
-  clearSessionFallbackId();
-  return parsed;
 }
 
 export async function fetchPreferences(): Promise<PreferencesResponse> {
-  const response = await fetch(apiUrl("/api/preferences"), {
-    credentials: "include",
-    headers: withSessionFallbackHeader(),
+  return timeAsync("api.fetchPreferences", async () => {
+    const response = await fetch(apiUrl("/api/preferences"), {
+      credentials: "include",
+      headers: withSessionFallbackHeader(),
+    });
+    return parseJsonResponse<PreferencesResponse>(response, "fetchPreferences");
   });
-  return parseJsonResponse<PreferencesResponse>(response);
 }
 
 export async function savePreferences(
   payload: PreferencesUpdateRequest
 ): Promise<PreferencesResponse> {
-  const response = await fetch(apiUrl("/api/preferences"), {
-    method: "PUT",
-    credentials: "include",
-    headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
-    body: JSON.stringify(payload),
+  return timeAsync("api.savePreferences", async () => {
+    const response = await fetch(apiUrl("/api/preferences"), {
+      method: "PUT",
+      credentials: "include",
+      headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    return parseJsonResponse<PreferencesResponse>(response, "savePreferences");
+  }, {
+    version: payload.version ?? null,
+    pinnedCount: payload.pinned_task_ids.length,
+    taskPreferenceCount: Object.keys(payload.task_ui_preferences).length,
   });
-  return parseJsonResponse<PreferencesResponse>(response);
 }
 
 export async function submitProgress(
   payload: SubmitProgressRequest
 ): Promise<SubmitProgressResponse> {
-  const response = await fetch(apiUrl("/api/progress"), {
-    method: "POST",
-    credentials: "include",
-    headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
-    body: JSON.stringify(payload),
+  return timeAsync("api.submitProgress", async () => {
+    const response = await fetch(apiUrl("/api/progress"), {
+      method: "POST",
+      credentials: "include",
+      headers: withSessionFallbackHeader({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    return parseJsonResponse<SubmitProgressResponse>(response, "submitProgress");
+  }, {
+    requirementId: payload.requirement_id,
+    countIncrement: payload.count_increment,
+    minutesSpent: payload.minutes_spent,
   });
-  return parseJsonResponse<SubmitProgressResponse>(response);
 }

@@ -23,6 +23,7 @@ import {
 import FilterBar from "./components/FilterBar.vue";
 import TaskTile from "./components/TaskTile.vue";
 import TilePicker from "./components/TilePicker.vue";
+import { logPoint, startTimer, timeAsync, timeSync } from "./diagnostics";
 import type {
   AuthStatusResponse,
   BootstrapResponse,
@@ -94,14 +95,16 @@ const toast = ref<{ message: string; tone: ToastTone; visible: boolean }>({
 });
 
 function parseJson(raw: string | null): unknown {
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return timeSync("storage.json.parse", () => {
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, { hasValue: Boolean(raw), valueLength: raw?.length ?? 0 });
 }
 
 function sanitizeCountLabelMode(raw: unknown): CountLabelMode | null {
@@ -149,7 +152,9 @@ function sanitizeCountCap(raw: unknown): number | null {
 }
 
 function persistTaskUiPreferences(): void {
-  localStorage.setItem(TASK_UI_PREFERENCES_STORAGE_KEY, JSON.stringify(taskUiPreferences.value));
+  timeSync("storage.taskUiPreferences.persist", () => {
+    localStorage.setItem(TASK_UI_PREFERENCES_STORAGE_KEY, JSON.stringify(taskUiPreferences.value));
+  }, { count: Object.keys(taskUiPreferences.value).length });
 }
 
 function sanitizeTaskUiPreferencesMap(raw: unknown): Record<string, TaskUiPreferences> {
@@ -167,17 +172,18 @@ function sanitizeTaskUiPreferencesMap(raw: unknown): Record<string, TaskUiPrefer
 }
 
 function loadTaskUiPreferences(): void {
-  taskUiPreferences.value = sanitizeTaskUiPreferencesMap(
-    parseJson(localStorage.getItem(TASK_UI_PREFERENCES_STORAGE_KEY))
+  taskUiPreferences.value = timeSync("storage.taskUiPreferences.load", () =>
+    sanitizeTaskUiPreferencesMap(parseJson(localStorage.getItem(TASK_UI_PREFERENCES_STORAGE_KEY)))
   );
   persistTaskUiPreferences();
 }
 
 function restoreTabPreference(): void {
-  const cached = localStorage.getItem(TAB_STORAGE_KEY);
+  const cached = timeSync("storage.tab.load", () => localStorage.getItem(TAB_STORAGE_KEY));
   if (cached === "pinned" || cached === "settings") {
     activeTab.value = cached;
   }
+  logPoint("state.activeTab.restore", { value: activeTab.value });
 }
 
 function loadPins(serverPins: string[]): void {
@@ -186,20 +192,28 @@ function loadPins(serverPins: string[]): void {
 }
 
 function persistPins(): void {
-  localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(Array.from(pinnedTaskIds.value)));
+  timeSync("storage.pins.persist", () => {
+    localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(Array.from(pinnedTaskIds.value)));
+  }, { count: pinnedTaskIds.value.size });
 }
 
 function persistBootstrapCache(payload: BootstrapResponse): void {
-  localStorage.setItem(BOOTSTRAP_CACHE_STORAGE_KEY, JSON.stringify(payload));
+  timeSync("storage.bootstrap.persist", () => {
+    localStorage.setItem(BOOTSTRAP_CACHE_STORAGE_KEY, JSON.stringify(payload));
+  }, { taskCount: payload.tasks.length, stale: Boolean(payload.stale) });
 }
 
 function restoreBootstrapCache(): void {
-  const parsed = parseJson(localStorage.getItem(BOOTSTRAP_CACHE_STORAGE_KEY));
+  const parsed = timeSync("storage.bootstrap.load", () =>
+    parseJson(localStorage.getItem(BOOTSTRAP_CACHE_STORAGE_KEY))
+  );
   if (!parsed || typeof parsed !== "object") {
+    logPoint("storage.bootstrap.restore.empty");
     return;
   }
   const cached = parsed as BootstrapResponse;
   if (!Array.isArray(cached.tasks) || !cached.user) {
+    logPoint("storage.bootstrap.restore.invalid");
     return;
   }
   bootstrapData.value = cached;
@@ -212,6 +226,11 @@ function restoreBootstrapCache(): void {
     Number.isFinite(cached.preferences_version) && cached.preferences_version > 0
       ? cached.preferences_version
       : null;
+  logPoint("storage.bootstrap.restore.hit", {
+    taskCount: cached.tasks.length,
+    stale: true,
+    pinnedCount: cached.pinned_task_ids?.length ?? 0,
+  });
 }
 
 function applyServerPreferences(
@@ -374,11 +393,20 @@ function updateTaskCountCap(taskId: string, raw: string): void {
 
 function schedulePreferencesSync(): void {
   if (authRequired.value || !bootstrapData.value) {
+    logPoint("preferences.sync.skipped", {
+      authRequired: authRequired.value,
+      hasBootstrap: Boolean(bootstrapData.value),
+    });
     return;
   }
   if (pendingPreferencesSyncTimer !== null) {
     window.clearTimeout(pendingPreferencesSyncTimer);
   }
+  logPoint("preferences.sync.scheduled", {
+    delayMs: 450,
+    pinnedCount: pinnedTaskIds.value.size,
+    taskPreferenceCount: Object.keys(taskUiPreferences.value).length,
+  });
   pendingPreferencesSyncTimer = window.setTimeout(() => {
     void flushPreferencesSync();
   }, 450);
@@ -386,10 +414,18 @@ function schedulePreferencesSync(): void {
 
 async function flushPreferencesSync(): Promise<void> {
   if (preferencesSyncInFlight || authRequired.value) {
+    logPoint("preferences.sync.skip-flush", {
+      preferencesSyncInFlight,
+      authRequired: authRequired.value,
+    });
     return;
   }
   preferencesSyncInFlight = true;
   syncingPreferences.value = true;
+  const finish = startTimer("preferences.sync.flush", {
+    pinnedCount: pinnedTaskIds.value.size,
+    taskPreferenceCount: Object.keys(taskUiPreferences.value).length,
+  });
   try {
     const response = await savePreferences({
       pinned_task_ids: Array.from(pinnedTaskIds.value),
@@ -401,6 +437,7 @@ async function flushPreferencesSync(): Promise<void> {
       response.task_ui_preferences ?? {},
       response.version
     );
+    finish({ success: true, version: response.version ?? null });
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       const latest = await fetchPreferences();
@@ -410,10 +447,18 @@ async function flushPreferencesSync(): Promise<void> {
         latest.version
       );
       showToast("Settings were updated from another device. Loaded latest.", "info", 2500);
-    } else if (error instanceof ApiError && error.status === 401) {
+      finish({ success: true, resolvedConflict: true, latestVersion: latest.version ?? null });
+      return;
+    }
+
+    if (error instanceof ApiError && error.status === 401) {
       authRequired.value = true;
       showToast("Session expired. Sign in again.", "error", 3000);
     }
+    finish({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
   } finally {
     syncingPreferences.value = false;
     preferencesSyncInFlight = false;
@@ -431,24 +476,31 @@ function isAuthErrorMessage(message: string): boolean {
 }
 
 async function refreshAuthStatus(): Promise<void> {
-  try {
-    authStatus.value = await fetchAuthStatus();
-    authError.value = "";
-    if (authStatus.value.authenticated) {
-      authRequired.value = false;
-      return;
+  await timeAsync("ui.auth.refreshStatus", async () => {
+    try {
+      authStatus.value = await fetchAuthStatus();
+      authError.value = "";
+      if (authStatus.value.authenticated) {
+        authRequired.value = false;
+        return;
+      }
+      if (authStatus.value.auth_state === "network_error" && bootstrapData.value) {
+        authRequired.value = false;
+        return;
+      }
+      authRequired.value = true;
+    } catch (error) {
+      authError.value = error instanceof Error ? error.message : String(error);
+      throw error;
     }
-    if (authStatus.value.auth_state === "network_error" && bootstrapData.value) {
-      authRequired.value = false;
-      return;
-    }
-    authRequired.value = true;
-  } catch (error) {
-    authError.value = error instanceof Error ? error.message : String(error);
-  }
+  });
 }
 
 async function loadBootstrap(): Promise<boolean> {
+  const finish = startTimer("ui.bootstrap.load", {
+    hadBootstrap: Boolean(bootstrapData.value),
+    hadStaleData: bootstrapStale.value,
+  });
   loading.value = true;
   if (!bootstrapStale.value) {
     fetchError.value = "";
@@ -474,6 +526,11 @@ async function loadBootstrap(): Promise<boolean> {
     } else {
       fetchError.value = "";
     }
+    finish({
+      success: true,
+      taskCount: payload.tasks.length,
+      stale: bootstrapStale.value,
+    });
     return true;
   } catch (error) {
     if (error instanceof BootstrapTimeoutError) {
@@ -482,6 +539,7 @@ async function loadBootstrap(): Promise<boolean> {
       if (!bootstrapData.value) {
         authRequired.value = true;
       }
+      finish({ success: false, timeout: true, hasCachedData: Boolean(bootstrapData.value) });
       return false;
     }
     fetchError.value = error instanceof Error ? error.message : String(error);
@@ -491,15 +549,21 @@ async function loadBootstrap(): Promise<boolean> {
       bootstrapStale.value = false;
       authRequired.value = true;
       await refreshAuthStatus();
+      finish({ success: false, authFailure: true });
       return false;
     }
     if (bootstrapData.value) {
       bootstrapStale.value = true;
       fetchError.value = "Connection issue. Showing cached tasks while retrying.";
       authRequired.value = false;
+      finish({ success: false, usedCachedData: true });
       return false;
     }
     fetchError.value = error instanceof Error ? error.message : String(error);
+    finish({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   } finally {
     loading.value = false;
@@ -507,26 +571,48 @@ async function loadBootstrap(): Promise<boolean> {
 }
 
 async function loginFromCredentials(): Promise<void> {
+  const email = loginEmail.value.trim();
+  const finish = startTimer("ui.auth.login.submit", {
+    emailLength: email.length,
+    rememberRefreshToken: rememberRefreshToken.value,
+  });
+
   authBusy.value = true;
   authError.value = "";
   try {
     authStatus.value = await loginWithCredentials({
-      email: loginEmail.value.trim(),
+      email,
       password: loginPassword.value,
       persist_refresh_token: rememberRefreshToken.value,
     });
     loginPassword.value = "";
     if (authStatus.value.authenticated) {
       await loadBootstrap();
+      finish({
+        success: true,
+        authenticated: true,
+        hasBootstrap: Boolean(bootstrapData.value),
+      });
+      return;
     }
+    finish({
+      success: true,
+      authenticated: false,
+      authState: authStatus.value.auth_state,
+    });
   } catch (error) {
     authError.value = error instanceof Error ? error.message : String(error);
+    finish({
+      success: false,
+      error: authError.value,
+    });
   } finally {
     authBusy.value = false;
   }
 }
 
 async function signOut(): Promise<void> {
+  const finish = startTimer("ui.auth.signOut");
   authBusy.value = true;
   authError.value = "";
   try {
@@ -538,8 +624,10 @@ async function signOut(): Promise<void> {
     fetchError.value = "";
     authRequired.value = true;
     resetFlow();
+    finish({ success: true });
   } catch (error) {
     authError.value = error instanceof Error ? error.message : String(error);
+    finish({ success: false, error: authError.value });
   } finally {
     authBusy.value = false;
   }
@@ -774,13 +862,16 @@ const minuteSubtitle = computed(() => {
 
 function startLogFlow(task: TaskItem): void {
   if (submitting.value) {
+    logPoint("ui.logFlow.start.ignored", { reason: "submitting", taskId: task.id });
     return;
   }
   if (readOnlyCachedView.value) {
     showToast("Syncing latest tasks. Logging is temporarily disabled.", "info", 2200);
+    logPoint("ui.logFlow.start.ignored", { reason: "cached-read-only", taskId: task.id });
     return;
   }
 
+  logPoint("ui.logFlow.start", { taskId: task.id, timeOnly: task.time_only });
   selectedTask.value = task;
   selectedCount.value = null;
   selectedCountLabel.value = "";
@@ -795,9 +886,11 @@ function startLogFlow(task: TaskItem): void {
 
 function selectCount(value: number): void {
   if (!selectedTask.value) {
+    logPoint("ui.logFlow.selectCount.ignored", { reason: "no-task", value });
     return;
   }
 
+  logPoint("ui.logFlow.selectCount", { taskId: selectedTask.value.id, value });
   const preferences = resolveTaskUiPreferences(selectedTask.value.id);
   selectedCount.value = value;
   selectedCountLabel.value =
@@ -810,6 +903,12 @@ function selectCount(value: number): void {
 
 async function selectMinutes(value: number): Promise<void> {
   if (!selectedTask.value || selectedCount.value === null || submitting.value) {
+    logPoint("ui.logFlow.selectMinutes.ignored", {
+      hasTask: Boolean(selectedTask.value),
+      hasCount: selectedCount.value !== null,
+      submitting: submitting.value,
+      value,
+    });
     return;
   }
 
@@ -818,6 +917,12 @@ async function selectMinutes(value: number): Promise<void> {
 
   submitting.value = true;
   showToast("Processing...", "info");
+
+  const finish = startTimer("ui.logFlow.submit", {
+    taskId: task.id,
+    countIncrement: count,
+    minutesSpent: value,
+  });
 
   try {
     const response = await submitProgress({
@@ -835,15 +940,18 @@ async function selectMinutes(value: number): Promise<void> {
     };
     resetFlow();
     showToast("Done", "success", 1800);
+    finish({ success: true, newCount: task.current_count });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     showToast(`Failed: ${message}. Tap a time tile to retry.`, "error", 4200);
+    finish({ success: false, error: message });
   } finally {
     submitting.value = false;
   }
 }
 
 function pickerBack(): void {
+  logPoint("ui.logFlow.back", { flowStage: flowStage.value, timeOnly: selectedTask.value?.time_only ?? null });
   if (flowStage.value === "minutes") {
     if (selectedTask.value?.time_only) {
       resetFlow();
@@ -857,7 +965,10 @@ function pickerBack(): void {
 }
 
 watch(activeTab, (value) => {
-  localStorage.setItem(TAB_STORAGE_KEY, value);
+  logPoint("state.activeTab.changed", { value });
+  timeSync("storage.tab.persist", () => {
+    localStorage.setItem(TAB_STORAGE_KEY, value);
+  }, { value });
   if (value === "settings") {
     resetFlow();
     return;
@@ -865,21 +976,63 @@ watch(activeTab, (value) => {
   void scrollViewportToTop();
 });
 
-watch(flowStage, () => {
+watch(flowStage, (value) => {
+  logPoint("state.flowStage.changed", { value });
   void scrollViewportToTop();
 });
 
+watch(authRequired, (value) => {
+  logPoint("state.authRequired.changed", { value });
+});
+
+watch(loading, (value) => {
+  logPoint("state.loading.changed", { value });
+});
+
+watch(bootstrapStale, (value) => {
+  logPoint("state.bootstrapStale.changed", { value });
+});
+
+watch(fetchError, (value) => {
+  logPoint("state.fetchError.changed", { value });
+});
+
+watch(authBusy, (value) => {
+  logPoint("state.authBusy.changed", { value });
+});
+
 async function initializeApp(): Promise<void> {
-  restoreTabPreference();
-  loadTaskUiPreferences();
-  restoreBootstrapCache();
-  await refreshAuthStatus();
-  if (authStatus.value?.authenticated) {
-    await loadBootstrap();
-    return;
-  }
-  if (!bootstrapData.value) {
-    authRequired.value = true;
+  const finish = startTimer("app.initialize");
+  try {
+    restoreTabPreference();
+    loadTaskUiPreferences();
+    restoreBootstrapCache();
+    await refreshAuthStatus();
+    if (authStatus.value?.authenticated) {
+      await loadBootstrap();
+      finish({
+        success: true,
+        authenticated: true,
+        authRequired: authRequired.value,
+        hasBootstrap: Boolean(bootstrapData.value),
+      });
+      return;
+    }
+    if (!bootstrapData.value) {
+      authRequired.value = true;
+    }
+    finish({
+      success: true,
+      authenticated: false,
+      authRequired: authRequired.value,
+      hasBootstrap: Boolean(bootstrapData.value),
+    });
+  } catch (error) {
+    finish({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
 }
 

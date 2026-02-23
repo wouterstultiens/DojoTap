@@ -1,4 +1,9 @@
 ## [2026-02-23]
+- Done: Inspected production Render cron logs via CLI and confirmed latest manual run failed before submission due to missing Playwright Chromium executable at runtime (`/opt/render/.cache/ms-playwright/...`).
+- Done: Updated `render.yaml` cron build/runtime to pin `PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright` so installed browsers are available during cron execution.
+- Next: Push the Playwright path fix, rerun Render cron once, and verify logs show `ok: true` with `submitted_entries >= 1` for the intentionally removed day.
+
+## [2026-02-23]
 - Done: Switched Render cron service `dojotap-chesstempo-csv` to run `backend.integrations.chesstempo.log_unlogged_days` daily instead of CSV-only fetch.
 - Done: Updated cron build deps to include backend app requirements needed by `log_unlogged_days` (`fastapi`, `httpx`, `pydantic-settings`, `tzdata`) plus Playwright.
 - Done: Added failure-summary persistence in `log_unlogged_days.py` so `--summary-output` is written on both success and failure (includes `error_type` + `traceback` on failure).

@@ -1,4 +1,10 @@
 ## [2026-02-23]
+- Done: Added a full favicon set under `frontend/public` (SVG/ICO/PNG) including `apple-touch-icon.png` for iPhone Safari Favorites and web clips.
+- Done: Wired favicon, Apple touch icon, manifest, and theme color tags into `frontend/index.html`.
+- Done: Added `frontend/scripts/generate-favicons.ps1` so favicon assets can be regenerated consistently.
+- Next: Deploy frontend and verify on iPhone Safari (Favorites + Add to Home Screen) after clearing cached website data.
+
+## [2026-02-23]
 - Done: Removed manual bearer-token auth override from DojoTap API/UI; login now accepts email + password only (`/api/auth/login` payload uses `email`).
 - Done: Removed backend fallback to manual/env bearer tokens in `LocalAuthManager`; auth mode is now session-based only.
 - Done: Added frontend bootstrap fetch timeout handling (10 seconds); on timeout DojoTap aborts fetch, logs out local session, and returns to sign-in with a clear retry message.

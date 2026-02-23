@@ -585,7 +585,7 @@ const countTileOptions = computed(() => {
   const preferences = resolveTaskUiPreferences(selectedTask.value.id);
   const values: { value: number; label: string }[] = [];
 
-  for (let increment = 1; increment <= preferences.count_cap; increment += 1) {
+  for (let increment = 0; increment <= preferences.count_cap; increment += 1) {
     values.push({
       value: increment,
       label:

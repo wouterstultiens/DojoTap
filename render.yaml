@@ -3,7 +3,7 @@ services:
     name: dojotap-api
     runtime: python
     plan: free
-    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings uvicorn
+    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings uvicorn && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
@@ -12,6 +12,24 @@ services:
         value: https://wouterstultiens.github.io
       - key: LOCAL_AUTH_STATE_PATH
         value: /tmp/dojotap-auth_state.json
+      - key: CT_AUTO_BACKFILL_ON_LOGIN
+        value: "true"
+      - key: CT_AUTO_BACKFILL_STATE_PATH
+        value: /tmp/dojotap-ct-auto-backfill-state.json
+      - key: CT_AUTO_BACKFILL_SUMMARY_PATH
+        value: /tmp/chesstempo/backfill-on-login.json
+      - key: CT_STATS_URL
+        sync: false
+      - key: CT_STORAGE_STATE_B64
+        sync: false
+      - key: CT_USERNAME
+        sync: false
+      - key: CT_PASSWORD
+        sync: false
+      - key: CT_TIMEZONE
+        value: Europe/Amsterdam
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/src/.playwright
 
   - type: cron
     name: dojotap-chesstempo-csv

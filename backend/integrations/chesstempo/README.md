@@ -62,6 +62,12 @@ python -m backend.integrations.chesstempo.log_unlogged_days `
 - Optional file targets: `CT_OUTPUT`, `CT_SUMMARY_OUTPUT`
 - Optional timezone: `CT_TIMEZONE` (default `Europe/Amsterdam`)
 
+For API login-triggered daily runs (`/api/auth/login` first login of day):
+- `CT_AUTO_BACKFILL_ON_LOGIN=true`
+- Optional state/summary targets:
+  - `CT_AUTO_BACKFILL_STATE_PATH` (default `/tmp/dojotap-ct-auto-backfill-state.json`)
+  - `CT_AUTO_BACKFILL_SUMMARY_PATH` (default `/tmp/chesstempo/backfill-on-login.json`)
+
 ## Render cron command
 
 ```bash

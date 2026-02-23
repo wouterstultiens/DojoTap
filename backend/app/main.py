@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import LocalAuthManager
 from .chessdojo import ChessDojoClient, build_progress_payload, format_bootstrap, merge_requirements
+from .ct_auto_backfill import maybe_schedule_on_login
 from .config import get_settings
 from .models import (
     AuthStatusResponse,
@@ -124,6 +125,11 @@ async def auth_login(payload: LoginRequest) -> AuthStatusResponse:
         username=payload.username,
         password=payload.password,
         persist_refresh_token=payload.persist_refresh_token,
+    )
+    await maybe_schedule_on_login(
+        settings=settings,
+        username=payload.username,
+        password=payload.password,
     )
     return AuthStatusResponse(**status)
 

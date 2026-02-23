@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -27,6 +28,9 @@ class Settings(BaseSettings):
     chessdojo_oauth_scope: str = Field(default="openid email profile")
     auth_refresh_skew_seconds: int = Field(default=120)
     local_auth_state_path: str = Field(default="")
+    ct_auto_backfill_on_login: bool = Field(default=True)
+    ct_auto_backfill_state_path: str = Field(default="")
+    ct_auto_backfill_summary_path: str = Field(default="")
 
     def normalized_bearer_token(self) -> str:
         token = self.chessdojo_bearer_token.strip()
@@ -76,6 +80,22 @@ class Settings(BaseSettings):
         if raw_path:
             return Path(raw_path).expanduser()
         return Path.home() / ".dojotap" / "auth_state.json"
+
+    def resolved_ct_auto_backfill_state_path(self) -> Path:
+        raw_path = self.ct_auto_backfill_state_path.strip()
+        if raw_path:
+            return Path(raw_path).expanduser()
+        if os.name == "nt":
+            return Path.home() / ".dojotap" / "ct_auto_backfill_state.json"
+        return Path("/tmp/dojotap-ct-auto-backfill-state.json")
+
+    def resolved_ct_auto_backfill_summary_path(self) -> Path:
+        raw_path = self.ct_auto_backfill_summary_path.strip()
+        if raw_path:
+            return Path(raw_path).expanduser()
+        if os.name == "nt":
+            return Path.home() / ".dojotap" / "ct_auto_backfill_summary.json"
+        return Path("/tmp/chesstempo/backfill-on-login.json")
 
 
 @lru_cache(maxsize=1)

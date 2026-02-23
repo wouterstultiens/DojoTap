@@ -1,4 +1,12 @@
 ## [2026-02-23]
+- Done: Added login-triggered ChessTempo backfill scheduler (`backend/app/ct_auto_backfill.py`) that runs `log_unlogged_days` on first `POST /api/auth/login` per day in `CT_TIMEZONE`.
+- Done: Wired `/api/auth/login` to schedule the background backfill job after successful ChessDojo login.
+- Done: Added persistent auto-backfill state/summary config in `Settings` (`CT_AUTO_BACKFILL_*`) and Render web-service env vars for `CT_*` integration data.
+- Done: Updated Render web-service build to install Playwright + Chromium so login-triggered backfill can run inside `dojotap-api`.
+- Done: Added scheduler tests in `backend/tests/test_ct_auto_backfill.py` and updated docs (`README.md`, `docs/CONTEXT.md`, `backend/integrations/chesstempo/README.md`, `.env.example`).
+- Next: Deploy web-service changes, login once in production, then verify Render web logs show `ct_auto_backfill` scheduling + `status: success` and that the removed day is recreated.
+
+## [2026-02-23]
 - Done: Inspected production Render cron logs via CLI and confirmed latest manual run failed before submission due to missing Playwright Chromium executable at runtime (`/opt/render/.cache/ms-playwright/...`).
 - Done: Updated `render.yaml` cron build/runtime to pin `PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright` so installed browsers are available during cron execution.
 - Next: Push the Playwright path fix, rerun Render cron once, and verify logs show `ok: true` with `submitted_entries >= 1` for the intentionally removed day.

@@ -147,6 +147,15 @@ Render notes:
 - Set at least: `CT_STATS_URL`, `CT_STORAGE_STATE_B64`, `CHESSDOJO_USERNAME`, `CHESSDOJO_PASSWORD`.
 - Optional fallback: `CT_USERNAME`, `CT_PASSWORD`.
 
+Login-triggered daily backfill (web service):
+- On `POST /api/auth/login`, DojoTap now auto-schedules one `log_unlogged_days` run per day (first login in `CT_TIMEZONE` only).
+- This path reuses the login credentials from that request, so cron `CHESSDOJO_*` env vars are not required for this trigger.
+- Required web-service env vars: `CT_STATS_URL` and either `CT_STORAGE_STATE_B64` or `CT_USERNAME` + `CT_PASSWORD`.
+- Status/errors are written to:
+  - state: `CT_AUTO_BACKFILL_STATE_PATH` (default `/tmp/dojotap-ct-auto-backfill-state.json`)
+  - summary: `CT_AUTO_BACKFILL_SUMMARY_PATH` (default `/tmp/chesstempo/backfill-on-login.json`)
+- Render logs also include JSON markers with `ct_auto_backfill: true` for `scheduled`, `already_attempted_today`, and final `success`/failure.
+
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.
 

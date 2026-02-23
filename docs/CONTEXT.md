@@ -24,6 +24,7 @@
   - GitHub Pages via `.github/workflows/deploy-pages.yml` (frontend static build only)
   - Render Blueprint via `render.yaml`:
     - `dojotap-api` web service (free tier)
+    - web-service login trigger: first `POST /api/auth/login` per day can auto-run ChessTempo backfill
     - `dojotap-chesstempo-csv` cron service (starter tier; daily `log_unlogged_days` backfill run)
 
 ## Strict Constraints
@@ -55,6 +56,7 @@ DojoTap/
       main.py          # FastAPI routes incl. /api/auth/*, /api/health, /api/bootstrap, /api/progress
       auth.py          # local Cognito login + refresh-token persistence + manual token override
       chessdojo.py     # Upstream client + payload math + bootstrap formatting
+      ct_auto_backfill.py # one-run-per-day login-triggered ChessTempo backfill scheduler
       config.py        # Environment settings
       models.py        # API models
     scripts/
@@ -141,12 +143,14 @@ DojoTap/
   - health check: `/api/health`
   - `ALLOW_ORIGIN` must match GitHub Pages origin (`https://wouterstultiens.github.io`)
   - `LOCAL_AUTH_STATE_PATH` uses `/tmp/...` on Render (ephemeral; may require re-login after cold restart)
+  - login-triggered auto backfill uses `CT_AUTO_BACKFILL_ON_LOGIN=true` and writes state/summary under `/tmp/...` by default
 - ChessTempo automation conventions:
   - Keep ChessTempo logic under `backend/integrations/chesstempo` (no coupling to FastAPI route handlers).
   - Primary auth path is `CT_STORAGE_STATE_B64`; rotate it when sessions expire.
   - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
   - `log_unlogged_days.py` is the backfill entrypoint: it skips current day by default, only checks the last 30 days by default, and logs only missing day buckets for `ChessTempo Simple Tactics`.
   - For cron diagnostics, pass `--summary-output`; `log_unlogged_days.py` writes summary JSON on both success and failure.
+  - API login trigger also runs `log_unlogged_days.py` at most once per day and logs scheduling/result JSON to Render logs.
 - ChessDojo CLI automation conventions:
   - Keep standalone token/progress scripts under `backend/integrations/chessdojo`.
   - Reuse backend auth and payload helpers (`LocalAuthManager`, `build_progress_payload`) instead of duplicating logic.

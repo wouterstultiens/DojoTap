@@ -1,5 +1,49 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: true,
+        auth_mode: "session",
+        has_refresh_token: true,
+        username: "user@example.com",
+        auth_state: "ok",
+        needs_relogin: false,
+      }),
+    });
+  });
+
+  await page.route("**/api/preferences", async (route) => {
+    if (route.request().method().toUpperCase() === "PUT") {
+      const body = JSON.parse(route.request().postData() ?? "{}");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          pinned_task_ids: body.pinned_task_ids ?? [],
+          task_ui_preferences: body.task_ui_preferences ?? {},
+          version: Math.max(1, Number(body.version ?? 0) + 1),
+          updated_at_epoch: 1730000000,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        pinned_task_ids: [],
+        task_ui_preferences: {},
+        version: 1,
+        updated_at_epoch: 1730000000,
+      }),
+    });
+  });
+});
+
 test("smoke: on-card controls drive count labels and submit", async ({ page }) => {
   let submittedPayload: Record<string, unknown> | null = null;
 

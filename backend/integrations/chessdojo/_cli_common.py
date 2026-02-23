@@ -4,6 +4,7 @@ import getpass
 import os
 import re
 import sys
+from pathlib import Path
 from collections.abc import Sequence
 from typing import Any
 
@@ -11,6 +12,8 @@ from fastapi import HTTPException
 
 from backend.app.auth import LocalAuthManager
 from backend.app.config import Settings, get_settings
+from backend.app.crypto import TokenCipher
+from backend.app.db import Database
 
 
 def resolve_settings() -> Settings:
@@ -50,7 +53,14 @@ async def resolve_bearer_token(
     force_refresh: bool,
 ) -> tuple[Settings, LocalAuthManager, str]:
     settings = resolve_settings()
-    auth_manager = LocalAuthManager(settings)
+    database = Database(settings.database_url)
+    await database.init()
+    auth_manager = LocalAuthManager(
+        settings=settings,
+        session_factory=database.session_factory,
+        token_cipher=TokenCipher(settings.auth_state_encryption_key),
+    )
+    session_id = _load_cli_session_id(settings)
 
     if username or password:
         if not username or not password:
@@ -58,14 +68,51 @@ async def resolve_bearer_token(
                 "When using credentials, provide both username and password "
                 "(or CHESSDOJO_USERNAME and CHESSDOJO_PASSWORD)."
             )
-        await auth_manager.login(
+        _, session_id = await auth_manager.login(
             email=username,
             password=password,
             persist_refresh_token=persist_refresh_token,
         )
+        _save_cli_session_id(settings, session_id)
 
-    token = await auth_manager.get_bearer_token(force_refresh=force_refresh)
+    if not session_id:
+        raise ValueError(
+            "No active CLI session found. Provide username/password once to create one."
+        )
+
+    token, _ = await auth_manager.get_bearer_token(
+        session_id=session_id,
+        force_refresh=force_refresh,
+    )
     return settings, auth_manager, token
+
+
+def _default_cli_session_path() -> Path:
+    return Path.home() / ".dojotap" / "cli_session_id.txt"
+
+
+def _load_cli_session_id(settings: Settings) -> str | None:
+    if settings.local_auth_state_path.strip():
+        path = Path(settings.local_auth_state_path).expanduser().with_suffix(".session")
+    else:
+        path = _default_cli_session_path()
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def _save_cli_session_id(settings: Settings, session_id: str) -> None:
+    if settings.local_auth_state_path.strip():
+        path = Path(settings.local_auth_state_path).expanduser().with_suffix(".session")
+    else:
+        path = _default_cli_session_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(session_id, encoding="utf-8")
+    except OSError:
+        pass
 
 
 def match_requirement_by_name(

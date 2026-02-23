@@ -2,6 +2,8 @@ import type {
   AuthStatusResponse,
   BootstrapResponse,
   LoginRequest,
+  PreferencesResponse,
+  PreferencesUpdateRequest,
   SubmitProgressRequest,
   SubmitProgressResponse,
 } from "./types";
@@ -13,6 +15,16 @@ function apiUrl(path: string): string {
 }
 
 const BOOTSTRAP_TIMEOUT_MS = 10_000;
+
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 export class BootstrapTimeoutError extends Error {
   constructor(timeoutMs: number) {
@@ -33,12 +45,26 @@ async function parseApiError(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`;
 }
 
+async function assertOk(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseApiError(response));
+  }
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  await assertOk(response);
+  return (await response.json()) as T;
+}
+
 export async function fetchBootstrap(): Promise<BootstrapResponse> {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), BOOTSTRAP_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetch(apiUrl("/api/bootstrap"), { signal: abortController.signal });
+    response = await fetch(apiUrl("/api/bootstrap"), {
+      signal: abortController.signal,
+      credentials: "include",
+    });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new BootstrapTimeoutError(BOOTSTRAP_TIMEOUT_MS);
@@ -48,38 +74,44 @@ export async function fetchBootstrap(): Promise<BootstrapResponse> {
     clearTimeout(timeoutId);
   }
 
-  if (!response.ok) {
-    throw new Error(await parseApiError(response));
-  }
-  return (await response.json()) as BootstrapResponse;
+  return parseJsonResponse<BootstrapResponse>(response);
 }
 
 export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
-  const response = await fetch(apiUrl("/api/auth/status"));
-  if (!response.ok) {
-    throw new Error(await parseApiError(response));
-  }
-  return (await response.json()) as AuthStatusResponse;
+  const response = await fetch(apiUrl("/api/auth/status"), { credentials: "include" });
+  return parseJsonResponse<AuthStatusResponse>(response);
 }
 
 export async function loginWithCredentials(payload: LoginRequest): Promise<AuthStatusResponse> {
   const response = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    throw new Error(await parseApiError(response));
-  }
-  return (await response.json()) as AuthStatusResponse;
+  return parseJsonResponse<AuthStatusResponse>(response);
 }
 
 export async function logoutAuth(): Promise<AuthStatusResponse> {
-  const response = await fetch(apiUrl("/api/auth/logout"), { method: "POST" });
-  if (!response.ok) {
-    throw new Error(await parseApiError(response));
-  }
-  return (await response.json()) as AuthStatusResponse;
+  const response = await fetch(apiUrl("/api/auth/logout"), { method: "POST", credentials: "include" });
+  return parseJsonResponse<AuthStatusResponse>(response);
+}
+
+export async function fetchPreferences(): Promise<PreferencesResponse> {
+  const response = await fetch(apiUrl("/api/preferences"), { credentials: "include" });
+  return parseJsonResponse<PreferencesResponse>(response);
+}
+
+export async function savePreferences(
+  payload: PreferencesUpdateRequest
+): Promise<PreferencesResponse> {
+  const response = await fetch(apiUrl("/api/preferences"), {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse<PreferencesResponse>(response);
 }
 
 export async function submitProgress(
@@ -87,12 +119,9 @@ export async function submitProgress(
 ): Promise<SubmitProgressResponse> {
   const response = await fetch(apiUrl("/api/progress"), {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error(await parseApiError(response));
-  }
-  return (await response.json()) as SubmitProgressResponse;
+  return parseJsonResponse<SubmitProgressResponse>(response);
 }

@@ -5,7 +5,7 @@ Dark-first, tile-only web app to log ChessDojo progress fast (task tile -> count
 ```powershell
 # 1) Python backend deps
 .\.venv\Scripts\python -m ensurepip --upgrade
-.\.venv\Scripts\python -m pip install fastapi httpx pydantic-settings tzdata uvicorn pytest
+.\.venv\Scripts\python -m pip install fastapi httpx pydantic-settings tzdata uvicorn pytest sqlalchemy asyncpg cryptography aiosqlite
 
 # 2) Frontend deps
 cd frontend
@@ -32,8 +32,9 @@ npm run e2e:smoke
 Open `http://localhost:5173`.
 
 At first load, if no valid token is available, DojoTap shows a local sign-in screen:
-- sign in with ChessDojo email + password (backend stores refresh token locally on your machine)
-- if task fetch takes longer than 10 seconds, DojoTap resets the local session and asks you to sign in again
+- sign in with ChessDojo email + password (backend sets an HttpOnly session cookie and persists encrypted refresh token)
+- when bootstrap is slow/unavailable, DojoTap keeps cached tasks in read-only mode and retries instead of forcing logout
+- cross-device settings sync is enabled for pinned tasks and per-task UI preferences
 
 ## ChessDojo Automation Scripts (Separate Integration)
 For automation outside the web UI, use scripts in `backend/integrations/chessdojo/`.
@@ -103,7 +104,8 @@ gh workflow run deploy-pages.yml --repo wouterstultiens/DojoTap
 
 Notes:
 - `ALLOW_ORIGIN` is set to `https://wouterstultiens.github.io` in `render.yaml` (GitHub Pages origin).
-- Free tier has cold starts and ephemeral disk, so persisted login refresh state can be lost between restarts.
+- Set `DATABASE_URL` to a managed Postgres connection string for persistent sessions/preferences across restarts/devices.
+- Set `AUTH_STATE_ENCRYPTION_KEY` (long random value) and keep `SESSION_COOKIE_SECURE=true`, `SESSION_COOKIE_SAMESITE=none` in production.
 
 ## ChessTempo CSV Automation (Separate Integration)
 ChessTempo fetch/parsing lives in `backend/integrations/chesstempo/` so it stays isolated from DojoTap app code.

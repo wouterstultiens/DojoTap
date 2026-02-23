@@ -6,24 +6,41 @@ from fastapi import HTTPException
 
 from backend.app.auth import LocalAuthManager
 from backend.app.config import Settings
+from backend.app.crypto import TokenCipher
+from backend.app.db import Database
 
 
 def _make_settings(tmp_path: Path) -> Settings:
     return Settings(
-        local_auth_state_path=str(tmp_path / "auth_state.json"),
+        database_url=f"sqlite:///{tmp_path / 'dojotap-test.db'}",
+        auth_state_encryption_key="unit-test-key",
     )
 
 
-def test_requires_login_when_no_session_or_refresh(tmp_path: Path) -> None:
-    manager = LocalAuthManager(_make_settings(tmp_path))
+def _make_manager(tmp_path: Path) -> tuple[Database, LocalAuthManager]:
+    settings = _make_settings(tmp_path)
+    database = Database(settings.database_url)
+    manager = LocalAuthManager(
+        settings=settings,
+        session_factory=database.session_factory,
+        token_cipher=TokenCipher(settings.auth_state_encryption_key),
+    )
+    return database, manager
+
+
+def test_requires_login_when_session_cookie_missing(tmp_path: Path) -> None:
+    database, manager = _make_manager(tmp_path)
+    asyncio.run(database.init())
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(manager.get_bearer_token())
+        asyncio.run(manager.get_bearer_token(session_id=None))
     assert exc_info.value.status_code == 401
     assert "email and password" in str(exc_info.value.detail)
+    asyncio.run(database.dispose())
 
 
 def test_login_uses_id_token_and_persists_refresh_token(tmp_path: Path, monkeypatch) -> None:
-    manager = LocalAuthManager(_make_settings(tmp_path))
+    database, manager = _make_manager(tmp_path)
+    asyncio.run(database.init())
 
     async def _fake_oauth_login_with_credentials(username: str, password: str) -> dict:
         assert username == "user@example.com"
@@ -39,7 +56,7 @@ def test_login_uses_id_token_and_persists_refresh_token(tmp_path: Path, monkeypa
         manager, "_oauth_login_with_credentials", _fake_oauth_login_with_credentials
     )
 
-    status = asyncio.run(
+    status, session_id = asyncio.run(
         manager.login(
             email="user@example.com",
             password="secret-password",
@@ -50,11 +67,15 @@ def test_login_uses_id_token_and_persists_refresh_token(tmp_path: Path, monkeypa
     assert status["authenticated"] is True
     assert status["auth_mode"] == "session"
     assert status["has_refresh_token"] is True
-    assert asyncio.run(manager.get_bearer_token()) == "id-token-1"
+    token, user_key = asyncio.run(manager.get_bearer_token(session_id=session_id))
+    assert token == "id-token-1"
+    assert user_key == "user@example.com"
+    asyncio.run(database.dispose())
 
 
 def test_refresh_flow_renews_expired_session(tmp_path: Path, monkeypatch) -> None:
-    manager = LocalAuthManager(_make_settings(tmp_path))
+    database, manager = _make_manager(tmp_path)
+    asyncio.run(database.init())
     calls: list[str] = []
 
     async def _fake_oauth_login_with_credentials(username: str, password: str) -> dict:
@@ -82,7 +103,7 @@ def test_refresh_flow_renews_expired_session(tmp_path: Path, monkeypatch) -> Non
     )
     monkeypatch.setattr(manager, "_oauth_refresh_tokens", _fake_oauth_refresh_tokens)
 
-    asyncio.run(
+    _, session_id = asyncio.run(
         manager.login(
             email="user@example.com",
             password="secret-password",
@@ -90,9 +111,7 @@ def test_refresh_flow_renews_expired_session(tmp_path: Path, monkeypatch) -> Non
         )
     )
 
-    assert manager._session_tokens is not None
-    manager._session_tokens.expires_at_epoch = 0
-    token = asyncio.run(manager.get_bearer_token())
-
+    token, _ = asyncio.run(manager.get_bearer_token(session_id=session_id, force_refresh=True))
     assert token == "id-token-refresh"
     assert calls == ["login", "refresh"]
+    asyncio.run(database.dispose())

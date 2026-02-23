@@ -1,6 +1,21 @@
 import { test } from "@playwright/test";
 
 test("visual baseline capture", async ({ page }, testInfo) => {
+  await page.route("**/api/auth/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: true,
+        auth_mode: "session",
+        has_refresh_token: true,
+        username: "user@example.com",
+        auth_state: "ok",
+        needs_relogin: false,
+      }),
+    });
+  });
+
   await page.addInitScript(() => {
     localStorage.clear();
   });

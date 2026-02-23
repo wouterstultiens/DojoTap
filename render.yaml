@@ -3,13 +3,25 @@ services:
     name: dojotap-api
     runtime: python
     plan: free
-    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings uvicorn && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
+    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings uvicorn sqlalchemy asyncpg cryptography aiosqlite && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: ALLOW_ORIGIN
         value: https://wouterstultiens.github.io
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_STATE_ENCRYPTION_KEY
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: none
+      - key: SESSION_COOKIE_MAX_AGE_DAYS
+        value: "30"
+      - key: BOOTSTRAP_CACHE_MAX_AGE_SECONDS
+        value: "172800"
       - key: LOCAL_AUTH_STATE_PATH
         value: /tmp/dojotap-auth_state.json
       - key: CT_AUTO_BACKFILL_ON_LOGIN
@@ -40,7 +52,7 @@ services:
     runtime: python
     plan: starter
     schedule: "0 4 * * *"
-    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings tzdata && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
+    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings tzdata sqlalchemy asyncpg cryptography aiosqlite && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
     startCommand: python -m backend.integrations.chesstempo.log_unlogged_days --headless --stats-url "$CT_STATS_URL" --summary-output /tmp/chesstempo/backfill.json --storage-state-output "$CT_STORAGE_STATE_PATH" --no-prompt
     envVars:
       - key: CT_STATS_URL

@@ -1,4 +1,12 @@
 ## [2026-02-23]
+- Done: Replaced file/in-memory auth with DB-backed session auth (`HttpOnly` cookie) and encrypted refresh-token persistence (`AUTH_STATE_ENCRYPTION_KEY`) using SQLAlchemy async tables.
+- Done: Added bootstrap cache fallback path so slow/network bootstrap failures keep cached tasks visible in read-only mode instead of forcing logout.
+- Done: Added backend preferences API (`GET/PUT /api/preferences`) and wired frontend pin/task UI preference sync with version-based conflict handling and cross-device persistence.
+- Done: Updated frontend auth/bootstrap flow to call `/api/auth/status`, include credentials on API calls, hydrate cached bootstrap, and disable logging while stale cache is displayed.
+- Done: Updated deployment/config docs and env examples for DB + cookie + encryption settings.
+- Next: Provision Render Postgres + env (`DATABASE_URL`, `AUTH_STATE_ENCRYPTION_KEY`), deploy, and verify two-device sync + stale-bootstrap read-only behavior in production.
+
+## [2026-02-23]
 - Done: Added a full favicon set under `frontend/public` (SVG/ICO/PNG) including `apple-touch-icon.png` for iPhone Safari Favorites and web clips.
 - Done: Wired favicon, Apple touch icon, manifest, and theme color tags into `frontend/index.html`.
 - Done: Added `frontend/scripts/generate-favicons.ps1` so favicon assets can be regenerated consistently.

@@ -45,7 +45,7 @@ async def _run(args: argparse.Namespace) -> int:
         password_arg=args.password,
         no_prompt=args.no_prompt,
     )
-    _, auth_manager, token = await resolve_bearer_token(
+    _, _, token = await resolve_bearer_token(
         username=username,
         password=password,
         persist_refresh_token=bool(args.persist_refresh_token),
@@ -63,7 +63,6 @@ async def _run(args: argparse.Namespace) -> int:
                     "ok": True,
                     "token": token,
                     "authorization_header": f"Bearer {token}",
-                    "status": auth_manager.status(),
                 },
                 ensure_ascii=True,
             )
@@ -87,4 +86,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

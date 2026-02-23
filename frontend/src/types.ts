@@ -29,8 +29,13 @@ export interface BootstrapResponse {
   tasks: TaskItem[];
   progress_by_requirement_id: ProgressMap;
   pinned_task_ids: string[];
+  task_ui_preferences: Record<string, TaskUiPreferences>;
+  preferences_version: number;
   available_cohorts: string[];
   default_filters: Record<string, string>;
+  stale: boolean;
+  data_source: "live" | "cache";
+  fetched_at_epoch: number | null;
 }
 
 export interface SubmitProgressRequest {
@@ -63,10 +68,25 @@ export interface AuthStatusResponse {
   auth_mode: string;
   has_refresh_token: boolean;
   username: string | null;
+  auth_state: "ok" | "refreshing" | "expired" | "network_error";
+  needs_relogin: boolean;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
   persist_refresh_token: boolean;
+}
+
+export interface PreferencesResponse {
+  pinned_task_ids: string[];
+  task_ui_preferences: Record<string, TaskUiPreferences>;
+  version: number;
+  updated_at_epoch: number;
+}
+
+export interface PreferencesUpdateRequest {
+  pinned_task_ids: string[];
+  task_ui_preferences: Record<string, TaskUiPreferences>;
+  version: number | null;
 }

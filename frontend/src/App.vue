@@ -2,11 +2,14 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import {
+  ApiError,
   BootstrapTimeoutError,
   fetchAuthStatus,
   fetchBootstrap,
+  fetchPreferences,
   loginWithCredentials,
   logoutAuth,
+  savePreferences,
   submitProgress,
 } from "./api";
 import {
@@ -32,6 +35,7 @@ import type {
 const PIN_STORAGE_KEY = "dojotap_pinned_tasks_v1";
 const TAB_STORAGE_KEY = "dojotap_active_tab_v1";
 const TASK_UI_PREFERENCES_STORAGE_KEY = "dojotap_task_ui_preferences_v1";
+const BOOTSTRAP_CACHE_STORAGE_KEY = "dojotap_bootstrap_cache_v1";
 const TASK_COUNT_TEMPLATE_REGEX = /\{\{\s*count\s*\}\}/gi;
 
 type AppTab = "pinned" | "settings";
@@ -55,6 +59,13 @@ const authStatus = ref<AuthStatusResponse | null>(null);
 const loginEmail = ref("");
 const loginPassword = ref("");
 const rememberRefreshToken = ref(true);
+const bootstrapStale = ref(false);
+const bootstrapFetchedAtEpoch = ref<number | null>(null);
+const preferencesVersion = ref<number | null>(null);
+const syncingPreferences = ref(false);
+
+let pendingPreferencesSyncTimer: number | null = null;
+let preferencesSyncInFlight = false;
 
 const activeTab = ref<AppTab>("pinned");
 
@@ -141,22 +152,24 @@ function persistTaskUiPreferences(): void {
   localStorage.setItem(TASK_UI_PREFERENCES_STORAGE_KEY, JSON.stringify(taskUiPreferences.value));
 }
 
-function loadTaskUiPreferences(): void {
-  const parsed = parseJson(localStorage.getItem(TASK_UI_PREFERENCES_STORAGE_KEY));
-  if (!parsed || typeof parsed !== "object") {
-    taskUiPreferences.value = {};
-    return;
+function sanitizeTaskUiPreferencesMap(raw: unknown): Record<string, TaskUiPreferences> {
+  if (!raw || typeof raw !== "object") {
+    return {};
   }
-
   const next: Record<string, TaskUiPreferences> = {};
-  for (const [taskId, maybePreferences] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [taskId, maybePreferences] of Object.entries(raw as Record<string, unknown>)) {
     const sanitized = sanitizeTaskUiPreferences(maybePreferences);
     if (sanitized) {
       next[taskId] = sanitized;
     }
   }
+  return next;
+}
 
-  taskUiPreferences.value = next;
+function loadTaskUiPreferences(): void {
+  taskUiPreferences.value = sanitizeTaskUiPreferencesMap(
+    parseJson(localStorage.getItem(TASK_UI_PREFERENCES_STORAGE_KEY))
+  );
   persistTaskUiPreferences();
 }
 
@@ -168,23 +181,49 @@ function restoreTabPreference(): void {
 }
 
 function loadPins(serverPins: string[]): void {
-  const cached = localStorage.getItem(PIN_STORAGE_KEY);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached) as string[];
-      pinnedTaskIds.value = new Set(parsed);
-      return;
-    } catch {
-      // If cache parse fails, replace with server defaults.
-    }
-  }
-
   pinnedTaskIds.value = new Set(serverPins);
   persistPins();
 }
 
 function persistPins(): void {
   localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(Array.from(pinnedTaskIds.value)));
+}
+
+function persistBootstrapCache(payload: BootstrapResponse): void {
+  localStorage.setItem(BOOTSTRAP_CACHE_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function restoreBootstrapCache(): void {
+  const parsed = parseJson(localStorage.getItem(BOOTSTRAP_CACHE_STORAGE_KEY));
+  if (!parsed || typeof parsed !== "object") {
+    return;
+  }
+  const cached = parsed as BootstrapResponse;
+  if (!Array.isArray(cached.tasks) || !cached.user) {
+    return;
+  }
+  bootstrapData.value = cached;
+  authRequired.value = false;
+  bootstrapStale.value = true;
+  bootstrapFetchedAtEpoch.value = cached.fetched_at_epoch ?? null;
+  loadPins(cached.pinned_task_ids ?? []);
+  taskUiPreferences.value = sanitizeTaskUiPreferencesMap(cached.task_ui_preferences ?? {});
+  preferencesVersion.value =
+    Number.isFinite(cached.preferences_version) && cached.preferences_version > 0
+      ? cached.preferences_version
+      : null;
+}
+
+function applyServerPreferences(
+  pinnedTaskIds: string[],
+  nextTaskUiPreferences: Record<string, unknown>,
+  version: number | null
+): void {
+  loadPins(pinnedTaskIds);
+  taskUiPreferences.value = sanitizeTaskUiPreferencesMap(nextTaskUiPreferences);
+  persistPins();
+  persistTaskUiPreferences();
+  preferencesVersion.value = Number.isFinite(version) ? version : null;
 }
 
 function showToast(message: string, tone: ToastTone, durationMs?: number): void {
@@ -230,6 +269,7 @@ function togglePin(taskId: string): void {
   }
   pinnedTaskIds.value = new Set(pinnedTaskIds.value);
   persistPins();
+  schedulePreferencesSync();
 }
 
 function reconcileTaskUiPreferences(taskIds: string[]): void {
@@ -291,6 +331,7 @@ function updateTaskCountLabelMode(taskId: string, mode: CountLabelMode): void {
     },
   };
   persistTaskUiPreferences();
+  schedulePreferencesSync();
 }
 
 function updateTaskTileSize(taskId: string, mode: TileSizeMode): void {
@@ -309,6 +350,7 @@ function updateTaskTileSize(taskId: string, mode: TileSizeMode): void {
     },
   };
   persistTaskUiPreferences();
+  schedulePreferencesSync();
 }
 
 function updateTaskCountCap(taskId: string, raw: string): void {
@@ -327,6 +369,55 @@ function updateTaskCountCap(taskId: string, raw: string): void {
     },
   };
   persistTaskUiPreferences();
+  schedulePreferencesSync();
+}
+
+function schedulePreferencesSync(): void {
+  if (authRequired.value || !bootstrapData.value) {
+    return;
+  }
+  if (pendingPreferencesSyncTimer !== null) {
+    window.clearTimeout(pendingPreferencesSyncTimer);
+  }
+  pendingPreferencesSyncTimer = window.setTimeout(() => {
+    void flushPreferencesSync();
+  }, 450);
+}
+
+async function flushPreferencesSync(): Promise<void> {
+  if (preferencesSyncInFlight || authRequired.value) {
+    return;
+  }
+  preferencesSyncInFlight = true;
+  syncingPreferences.value = true;
+  try {
+    const response = await savePreferences({
+      pinned_task_ids: Array.from(pinnedTaskIds.value),
+      task_ui_preferences: taskUiPreferences.value,
+      version: preferencesVersion.value,
+    });
+    applyServerPreferences(
+      response.pinned_task_ids ?? [],
+      response.task_ui_preferences ?? {},
+      response.version
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      const latest = await fetchPreferences();
+      applyServerPreferences(
+        latest.pinned_task_ids ?? [],
+        latest.task_ui_preferences ?? {},
+        latest.version
+      );
+      showToast("Settings were updated from another device. Loaded latest.", "info", 2500);
+    } else if (error instanceof ApiError && error.status === 401) {
+      authRequired.value = true;
+      showToast("Session expired. Sign in again.", "error", 3000);
+    }
+  } finally {
+    syncingPreferences.value = false;
+    preferencesSyncInFlight = false;
+  }
 }
 
 function isAuthErrorMessage(message: string): boolean {
@@ -343,50 +434,72 @@ async function refreshAuthStatus(): Promise<void> {
   try {
     authStatus.value = await fetchAuthStatus();
     authError.value = "";
+    if (authStatus.value.authenticated) {
+      authRequired.value = false;
+      return;
+    }
+    if (authStatus.value.auth_state === "network_error" && bootstrapData.value) {
+      authRequired.value = false;
+      return;
+    }
+    authRequired.value = true;
   } catch (error) {
     authError.value = error instanceof Error ? error.message : String(error);
   }
 }
 
-async function forceReLoginAfterSlowFetch(error: BootstrapTimeoutError): Promise<void> {
-  const message = `${error.message} Session reset. Please sign in again.`;
-  bootstrapData.value = null;
-  resetFlow();
-  authRequired.value = true;
-  fetchError.value = message;
-  try {
-    authStatus.value = await logoutAuth();
-  } catch {
-    // Ignore logout failure; we still force sign-in UI.
-  }
-  await refreshAuthStatus();
-  authError.value = message;
-}
-
 async function loadBootstrap(): Promise<boolean> {
   loading.value = true;
-  fetchError.value = "";
+  if (!bootstrapStale.value) {
+    fetchError.value = "";
+  }
   try {
     const payload = await fetchBootstrap();
     bootstrapData.value = payload;
     authRequired.value = false;
+    bootstrapStale.value = Boolean(payload.stale);
+    bootstrapFetchedAtEpoch.value = payload.fetched_at_epoch ?? null;
     cohortFilter.value = payload.default_filters.cohort || "ALL";
     categoryFilter.value = "ALL";
     searchFilter.value = "";
-    loadPins(payload.pinned_task_ids ?? []);
+    applyServerPreferences(
+      payload.pinned_task_ids ?? [],
+      payload.task_ui_preferences ?? {},
+      payload.preferences_version ?? null
+    );
     reconcileTaskUiPreferences(payload.tasks.map((task) => task.id));
+    persistBootstrapCache(payload);
+    if (bootstrapStale.value) {
+      fetchError.value = "Network issue detected. Showing cached tasks while retrying.";
+    } else {
+      fetchError.value = "";
+    }
     return true;
   } catch (error) {
     if (error instanceof BootstrapTimeoutError) {
-      await forceReLoginAfterSlowFetch(error);
+      bootstrapStale.value = true;
+      fetchError.value = `${error.message} Showing cached tasks while retrying.`;
+      if (!bootstrapData.value) {
+        authRequired.value = true;
+      }
       return false;
     }
-    bootstrapData.value = null;
     fetchError.value = error instanceof Error ? error.message : String(error);
-    if (isAuthErrorMessage(fetchError.value)) {
+    const isAuthFailure = error instanceof ApiError ? error.status === 401 : isAuthErrorMessage(fetchError.value);
+    if (isAuthFailure) {
+      bootstrapData.value = null;
+      bootstrapStale.value = false;
       authRequired.value = true;
       await refreshAuthStatus();
+      return false;
     }
+    if (bootstrapData.value) {
+      bootstrapStale.value = true;
+      fetchError.value = "Connection issue. Showing cached tasks while retrying.";
+      authRequired.value = false;
+      return false;
+    }
+    fetchError.value = error instanceof Error ? error.message : String(error);
     return false;
   } finally {
     loading.value = false;
@@ -419,6 +532,9 @@ async function signOut(): Promise<void> {
   try {
     authStatus.value = await logoutAuth();
     bootstrapData.value = null;
+    bootstrapStale.value = false;
+    bootstrapFetchedAtEpoch.value = null;
+    preferencesVersion.value = null;
     fetchError.value = "";
     authRequired.value = true;
     resetFlow();
@@ -472,9 +588,34 @@ function isTaskCompleted(task: TaskItem): boolean {
 const completedPinnedCount = computed(() =>
   pinnedTasks.value.filter((task) => isTaskCompleted(task)).length
 );
+
+const readOnlyCachedView = computed(() => bootstrapStale.value);
+
+const staleCacheLabel = computed(() => {
+  if (!bootstrapFetchedAtEpoch.value) {
+    return "cached data";
+  }
+  const diffSeconds = Math.max(0, Math.round(Date.now() / 1000) - bootstrapFetchedAtEpoch.value);
+  if (diffSeconds < 60) {
+    return "cached a few seconds ago";
+  }
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `cached ${diffMinutes}m ago`;
+  }
+  const diffHours = Math.floor(diffMinutes / 60);
+  return `cached ${diffHours}h ago`;
+});
+
 const authModeLabel = computed(() => {
   if (!authStatus.value) {
     return bootstrapData.value ? "Signed in" : "Signed out";
+  }
+  if (authStatus.value.auth_state === "network_error") {
+    return "Network issue";
+  }
+  if (authStatus.value.needs_relogin) {
+    return "Re-login required";
   }
   const mode = authStatus.value?.auth_mode ?? "none";
   if (mode === "session") {
@@ -635,6 +776,10 @@ function startLogFlow(task: TaskItem): void {
   if (submitting.value) {
     return;
   }
+  if (readOnlyCachedView.value) {
+    showToast("Syncing latest tasks. Logging is temporarily disabled.", "info", 2200);
+    return;
+  }
 
   selectedTask.value = task;
   selectedCount.value = null;
@@ -724,9 +869,21 @@ watch(flowStage, () => {
   void scrollViewportToTop();
 });
 
-restoreTabPreference();
-loadTaskUiPreferences();
-void loadBootstrap();
+async function initializeApp(): Promise<void> {
+  restoreTabPreference();
+  loadTaskUiPreferences();
+  restoreBootstrapCache();
+  await refreshAuthStatus();
+  if (authStatus.value?.authenticated) {
+    await loadBootstrap();
+    return;
+  }
+  if (!bootstrapData.value) {
+    authRequired.value = true;
+  }
+}
+
+void initializeApp();
 </script>
 
 <template>
@@ -742,6 +899,8 @@ void loadBootstrap();
           <span v-if="bootstrapData" class="status-chip chip-user">{{ userDisplayName }}</span>
           <span v-if="bootstrapData" class="status-chip chip-pinned">{{ pinnedTasks.length }} pinned</span>
           <span v-if="bootstrapData" class="status-chip chip-completed">{{ completedPinnedCount }} completed</span>
+          <span v-if="bootstrapStale" class="status-chip chip-refresh">Read-only {{ staleCacheLabel }}</span>
+          <span v-if="syncingPreferences" class="status-chip chip-refresh">syncing settings</span>
           <span class="status-chip chip-auth">Auth: {{ authModeLabel }}</span>
           <span v-if="authStatus?.has_refresh_token" class="status-chip chip-refresh">refresh saved</span>
         </div>
@@ -777,6 +936,9 @@ void loadBootstrap();
 
     <p v-if="fetchError && !authRequired" class="notice error">{{ fetchError }}</p>
     <p v-if="loading && !authRequired" class="notice">Loading tasks...</p>
+    <p v-if="bootstrapStale && !authRequired" class="notice">
+      Showing {{ staleCacheLabel }} while refreshing from the server. Logging is temporarily disabled.
+    </p>
 
     <main v-if="authRequired" class="main-view auth-view">
       <section class="auth-card">

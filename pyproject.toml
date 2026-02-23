@@ -4,9 +4,13 @@ version = "0.1.0"
 description = "Tile-first ChessDojo progress logger"
 requires-python = ">=3.13"
 dependencies = [
+    "aiosqlite>=0.20.0",
+    "asyncpg>=0.29.0",
+    "cryptography>=44.0.0",
     "fastapi>=0.115.8",
     "httpx>=0.28.1",
     "pydantic-settings>=2.7.1",
+    "sqlalchemy>=2.0.38",
     "tzdata>=2025.1",
     "uvicorn>=0.34.0",
 ]

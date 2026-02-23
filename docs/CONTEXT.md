@@ -5,6 +5,10 @@
 - Backend:
   - `fastapi`
   - `httpx`
+  - `sqlalchemy`
+  - `asyncpg`
+  - `aiosqlite`
+  - `cryptography`
   - `pydantic-settings`
   - `tzdata`
   - `uvicorn`
@@ -41,7 +45,7 @@
   - count cap: `10`
   - count label mode: `+N`
   - tile size: `large`
-- UI preference persistence is local browser storage only in v1 (no backend sync).
+- Cross-device settings sync persists pinned tasks and per-task UI preferences in backend DB.
 
 ## Project Structure
 ```text
@@ -53,7 +57,9 @@ DojoTap/
   backend/
     app/
       main.py          # FastAPI routes incl. /api/auth/*, /api/health, /api/bootstrap, /api/progress
-      auth.py          # local Cognito email/password login + refresh-token persistence
+      auth.py          # local Cognito login + DB-backed session/refresh handling
+      db.py            # SQLAlchemy async models + DB initialization
+      crypto.py        # refresh-token encryption helper
       chessdojo.py     # Upstream client + payload math + bootstrap formatting
       ct_auto_backfill.py # one-run-per-day login-triggered ChessTempo backfill scheduler
       config.py        # Environment settings
@@ -121,10 +127,11 @@ DojoTap/
 - Backend bootstrap merges standard requirements with custom task access payload (`/user/access/v2`).
 - Backend auth model:
   - `POST /api/auth/login` performs Cognito Hosted UI OAuth login (`/oauth2/authorize` + `/login` + `/oauth2/token`)
+  - backend issues HttpOnly session cookie (`dojotap_sid` by default)
   - refresh uses OAuth `grant_type=refresh_token` automatically before expiry and once after upstream 401
-  - refresh token is persisted locally (`~/.dojotap/auth_state.json` by default)
+  - refresh token is encrypted at rest and persisted in DB per user
   - no manual bearer-token override endpoint; login is email/password only
-  - frontend bootstrap task fetch uses a 10-second timeout; on timeout, local auth is reset and UI returns to sign-in
+  - frontend bootstrap timeout/network errors no longer force logout; stale cached bootstrap can be served read-only
 - Settings task cards own per-task overrides:
   - count label mode (`+N` or absolute current+increment)
   - tile size (`very-small`, `small`, `medium`, or `large`)
@@ -132,8 +139,7 @@ DojoTap/
 - Settings filters include `Pinned` and `Hide completed` toggles.
 - Pinned tab keeps task tiles at the top of the screen; guidance is tucked into a compact `Quick help` disclosure.
 - Stage transitions (task -> count -> time and back) auto-scroll viewport to top for mobile consistency.
-- Pinned task state is local (`localStorage`) and initialized from server pins.
-- Per-task UI preferences are persisted in localStorage.
+- Pinned task state + per-task UI preferences are server-synced (`/api/preferences`) and cached in localStorage for startup speed.
 - Frontend dependency install should auto-provision Playwright MCP config via `frontend/scripts/ensure-codex-playwright-mcp.mjs` (idempotent).
 - Frontend build/runtime endpoint behavior:
   - `VITE_BASE_PATH` controls Vite `base` (needed for project Pages path deploys)
@@ -142,7 +148,8 @@ DojoTap/
   - service name: `dojotap-api`
   - health check: `/api/health`
   - `ALLOW_ORIGIN` must match GitHub Pages origin (`https://wouterstultiens.github.io`)
-  - `LOCAL_AUTH_STATE_PATH` uses `/tmp/...` on Render (ephemeral; may require re-login after cold restart)
+  - `DATABASE_URL` should point to managed Postgres for persistent sessions/preferences across restarts/devices
+  - production cookie settings should use `SESSION_COOKIE_SECURE=true` and `SESSION_COOKIE_SAMESITE=none`
   - login-triggered auto backfill uses `CT_AUTO_BACKFILL_ON_LOGIN=true` and writes state/summary under `/tmp/...` by default
   - login-triggered and cron runs can auto-rotate ChessTempo storage state via `CT_STORAGE_STATE_PATH` + `--storage-state-output`
 - ChessTempo automation conventions:

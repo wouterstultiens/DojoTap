@@ -1,4 +1,16 @@
 ## [2026-02-23]
+- Done: Updated `backend/integrations/chesstempo/log_unlogged_days.py` to only consider the most recent 30 days by default (`--lookback-days`, env `CT_LOOKBACK_DAYS`) before backfilling missing logs.
+- Done: Added lookback-window test coverage in `backend/tests/test_chesstempo_log_unlogged_days.py`.
+- Done: Updated `README.md`, `docs/CONTEXT.md`, and `backend/integrations/chesstempo/README.md` to document 30-day default backfill behavior.
+- Next: Run one live `log_unlogged_days --headless --dry-run` and verify returned `earliest_day_included` before real submit.
+
+## [2026-02-23]
+- Done: Added `backend/integrations/chesstempo/log_unlogged_days.py` to auto-backfill unlogged days from ChessTempo CSV into ChessDojo task logging (`ChessTempo Simple Tactics` by default), skipping current day.
+- Done: Added tests in `backend/tests/test_chesstempo_log_unlogged_days.py` for timeline-day extraction, day filtering, max-day limiting, and backfill timestamp generation.
+- Done: Documented backfill usage in `README.md`, `docs/CONTEXT.md`, and `backend/integrations/chesstempo/README.md`.
+- Next: Run one live `log_unlogged_days --dry-run` followed by a real submit run to verify historical day matching against your actual timeline entries.
+
+## [2026-02-23]
 - Done: Added standalone ChessDojo integration CLIs under `backend/integrations/chessdojo` for bearer token fetch and progress logging by task name.
 - Done: Added `backend/integrations/chessdojo/get_progress.py` for full per-task timeline retrieval using `GET /public/user/{user_id}/timeline` (Bruno `Get Progress` flow).
 - Done: Reused existing backend auth/token refresh + payload logic so local/Render behavior matches FastAPI flow.

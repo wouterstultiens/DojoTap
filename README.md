@@ -129,6 +129,17 @@ Headless run (local or Render):
 python -m backend.integrations.chesstempo.fetch_attempts_csv --headless --stats-url "$CT_STATS_URL"
 ```
 
+Backfill unlogged ChessDojo days for task `ChessTempo Simple Tactics` (skips current day by default):
+```powershell
+python -m backend.integrations.chesstempo.log_unlogged_days `
+  --headless `
+  --stats-url "$CT_STATS_URL" `
+  --dry-run
+```
+
+By default it only considers the last 30 days (`--lookback-days` to change).
+Then run without `--dry-run` to submit missing days.
+
 Render notes:
 - `render.yaml` includes a separate cron service: `dojotap-chesstempo-csv`.
 - Render cron services require a paid plan (`starter`), not free tier.

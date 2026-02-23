@@ -67,12 +67,14 @@ DojoTap/
         README.md             # automation usage for token/progress scripts
       chesstempo/
         fetch_attempts_csv.py # Playwright-based CSV fetch + parse summary JSON
+        log_unlogged_days.py  # Backfill unlogged ChessTempo days into ChessDojo task logs
         requirements.txt      # Integration-only dependency list
         README.md             # Local bootstrap + Render runbook
     tests/
       test_auth.py     # auth manager token precedence + refresh tests
       test_payloads.py # count math and payload tests
       test_chesstempo_csv_parser.py # CSV parser and day aggregation tests
+      test_chesstempo_log_unlogged_days.py # backfill day selection/date mapping tests
   frontend/
     e2e/
       smoke.spec.ts         # mocked API smoke test
@@ -143,6 +145,7 @@ DojoTap/
   - Keep ChessTempo logic under `backend/integrations/chesstempo` (no coupling to FastAPI route handlers).
   - Primary auth path is `CT_STORAGE_STATE_B64`; rotate it when sessions expire.
   - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
+  - `log_unlogged_days.py` is the backfill entrypoint: it skips current day by default, only checks the last 30 days by default, and logs only missing day buckets for `ChessTempo Simple Tactics`.
 - ChessDojo CLI automation conventions:
   - Keep standalone token/progress scripts under `backend/integrations/chessdojo`.
   - Reuse backend auth and payload helpers (`LocalAuthManager`, `build_progress_payload`) instead of duplicating logic.

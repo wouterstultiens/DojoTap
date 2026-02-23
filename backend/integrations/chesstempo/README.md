@@ -1,4 +1,4 @@
-# ChessTempo CSV Automation
+# ChessTempo Automation
 
 This integration is intentionally separate from the DojoTap app flow.
 
@@ -27,11 +27,38 @@ $env:CT_STORAGE_STATE_B64="<value>"
 python -m backend.integrations.chesstempo.fetch_attempts_csv --headless
 ```
 
+## Backfill unlogged ChessDojo days
+
+Logs missing historical days for task `ChessTempo Simple Tactics` by combining:
+- ChessTempo daily CSV summary
+- ChessDojo task timeline (`/public/user/{user_id}/timeline`)
+- ChessDojo progress submit (`POST /user/progress/v3`)
+
+Current day is skipped by default.
+Lookback window is 30 days by default.
+
+```powershell
+python -m backend.integrations.chesstempo.log_unlogged_days `
+  --headless `
+  --stats-url "$CT_STATS_URL" `
+  --dry-run
+```
+
+Real submit:
+
+```powershell
+python -m backend.integrations.chesstempo.log_unlogged_days `
+  --headless `
+  --stats-url "$CT_STATS_URL" `
+  --lookback-days 30
+```
+
 ## Render env vars
 
 - `CT_STORAGE_STATE_B64` (primary auth path)
 - `CT_STATS_URL` (stats page URL)
 - Optional fallback: `CT_USERNAME`, `CT_PASSWORD`
+- Optional ChessDojo login: `CHESSDOJO_USERNAME`, `CHESSDOJO_PASSWORD`
 - Optional file targets: `CT_OUTPUT`, `CT_SUMMARY_OUTPUT`
 - Optional timezone: `CT_TIMEZONE` (default `Europe/Amsterdam`)
 
@@ -43,6 +70,15 @@ python -m backend.integrations.chesstempo.fetch_attempts_csv \
   --stats-url "$CT_STATS_URL" \
   --output /tmp/chesstempo/download.csv \
   --summary-output /tmp/chesstempo/summary.json
+```
+
+Backfill variant:
+
+```bash
+python -m backend.integrations.chesstempo.log_unlogged_days \
+  --headless \
+  --stats-url "$CT_STATS_URL" \
+  --summary-output /tmp/chesstempo/backfill.json
 ```
 
 ## JSON output contract

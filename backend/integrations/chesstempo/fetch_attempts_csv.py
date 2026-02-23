@@ -101,6 +101,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--storage-state-output",
+        default=os.environ.get("CT_STORAGE_STATE_OUTPUT"),
+        help=(
+            "Optional path where refreshed CT_STORAGE_STATE_B64 is written after "
+            "successful login/fetch."
+        ),
+    )
+    parser.add_argument(
         "--print-storage-state",
         action="store_true",
         help="Print CT_STORAGE_STATE_B64 after a successful run.",
@@ -167,6 +175,13 @@ def decode_storage_state(value: str | None) -> dict[str, Any] | None:
 def encode_storage_state(value: dict[str, Any]) -> str:
     payload = json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     return base64.b64encode(payload).decode("utf-8")
+
+
+def write_storage_state_output(path_value: str, b64_value: str) -> str:
+    output_path = Path(path_value).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(b64_value + "\n", encoding="utf-8")
+    return str(output_path)
 
 
 def maybe_login(page, args: argparse.Namespace, timeout_ms: int, timeout_error) -> None:
@@ -352,12 +367,14 @@ def fetch_csv_bytes(args: argparse.Namespace) -> tuple[bytes, str]:
             download = download_info.value
             download.save_as(str(output_path))
             csv_bytes = output_path.read_bytes()
+            encoded_state = encode_storage_state(context.storage_state())
+
+            if args.storage_state_output:
+                stored_path = write_storage_state_output(args.storage_state_output, encoded_state)
+                print(f"Wrote storage state: {stored_path}", file=sys.stderr)
 
             if args.init_session or args.print_storage_state:
-                print(
-                    f"CT_STORAGE_STATE_B64={encode_storage_state(context.storage_state())}",
-                    file=sys.stderr,
-                )
+                print(f"CT_STORAGE_STATE_B64={encoded_state}", file=sys.stderr)
             return csv_bytes, str(output_path)
         finally:
             with contextlib.suppress(Exception):

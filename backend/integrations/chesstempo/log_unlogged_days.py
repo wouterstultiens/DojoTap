@@ -231,6 +231,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Base64 Playwright storage_state JSON for headless/cloud runs.",
     )
     parser.add_argument(
+        "--storage-state-output",
+        default=os.environ.get("CT_STORAGE_STATE_OUTPUT"),
+        help="Optional path where refreshed CT_STORAGE_STATE_B64 is written.",
+    )
+    parser.add_argument(
         "--print-storage-state",
         action="store_true",
         help="Print CT_STORAGE_STATE_B64 after successful ChessTempo fetch.",
@@ -279,6 +284,7 @@ def _to_ct_fetch_args(args: argparse.Namespace) -> argparse.Namespace:
         password=args.ct_password,
         headless=bool(args.headless),
         storage_state_b64=args.storage_state_b64,
+        storage_state_output=args.storage_state_output,
         print_storage_state=bool(args.print_storage_state),
         init_session=bool(args.init_session),
         timeout=args.timeout,

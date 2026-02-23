@@ -55,9 +55,39 @@ def _today_iso_in_timezone(timezone_name: str) -> str:
     return datetime.now(tz).date().isoformat()
 
 
+def _default_storage_state_path() -> Path:
+    if os.name == "nt":
+        return Path.home() / ".dojotap" / "ct_storage_state.b64"
+    return Path("/tmp/chesstempo/storage_state.b64")
+
+
+def _resolve_storage_state_path() -> Path:
+    raw = os.environ.get("CT_STORAGE_STATE_PATH", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return _default_storage_state_path()
+
+
+def _resolve_storage_state_b64() -> tuple[str | None, str]:
+    storage_path = _resolve_storage_state_path()
+    try:
+        value = storage_path.read_text(encoding="utf-8").strip()
+        if value:
+            return value, "file"
+    except OSError:
+        pass
+
+    env_value = os.environ.get("CT_STORAGE_STATE_B64", "").strip()
+    if env_value:
+        return env_value, "env"
+    return None, "none"
+
+
 def _build_args(*, settings: Settings, username: str, password: str) -> argparse.Namespace:
     timezone_name = os.environ.get("CT_TIMEZONE", "Europe/Amsterdam")
     lookback_days = int(os.environ.get("CT_LOOKBACK_DAYS", "30"))
+    storage_state_b64, _ = _resolve_storage_state_b64()
+    storage_state_path = _resolve_storage_state_path()
     return argparse.Namespace(
         task=DEFAULT_TASK_NAME,
         timezone=timezone_name,
@@ -72,7 +102,8 @@ def _build_args(*, settings: Settings, username: str, password: str) -> argparse
         ct_username=os.environ.get("CT_USERNAME"),
         ct_password=os.environ.get("CT_PASSWORD"),
         headless=True,
-        storage_state_b64=os.environ.get("CT_STORAGE_STATE_B64"),
+        storage_state_b64=storage_state_b64,
+        storage_state_output=str(storage_state_path),
         print_storage_state=False,
         init_session=False,
         timeout=60,
@@ -94,6 +125,8 @@ async def _run_backfill_job(
     state_path = settings.resolved_ct_auto_backfill_state_path()
     summary_path = settings.resolved_ct_auto_backfill_summary_path()
     started_at = _iso_now_utc()
+    _, storage_state_source = _resolve_storage_state_b64()
+    storage_state_path = _resolve_storage_state_path()
     try:
         args = _build_args(settings=settings, username=username, password=password)
         await run_log_unlogged_days(args)
@@ -117,6 +150,8 @@ async def _run_backfill_job(
                     "status": "success",
                     "day": today_iso,
                     "summary_path": str(summary_path),
+                    "storage_state_source": storage_state_source,
+                    "storage_state_path": str(storage_state_path),
                 },
                 ensure_ascii=True,
             ),
@@ -131,6 +166,8 @@ async def _run_backfill_job(
             "trigger": "login_auto_backfill",
             "started_at": started_at,
             "failed_at": _iso_now_utc(),
+            "storage_state_source": storage_state_source,
+            "storage_state_path": str(storage_state_path),
         }
         _write_json(summary_path, failure_payload)
         async with _AUTO_BACKFILL_LOCK:

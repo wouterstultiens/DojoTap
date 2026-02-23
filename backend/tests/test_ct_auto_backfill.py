@@ -1,7 +1,7 @@
 import asyncio
 
 from backend.app.config import Settings
-from backend.app.ct_auto_backfill import maybe_schedule_on_login
+from backend.app.ct_auto_backfill import maybe_schedule_on_login, _resolve_storage_state_b64
 
 
 def _make_settings(tmp_path, enabled: bool = True) -> Settings:
@@ -64,3 +64,26 @@ def test_maybe_schedule_on_login_disabled(tmp_path) -> None:
         )
     )
     assert result == {"scheduled": False, "reason": "disabled"}
+
+
+def test_resolve_storage_state_prefers_file_over_env(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "ct_state.b64"
+    state_path.write_text("from-file", encoding="utf-8")
+    monkeypatch.setenv("CT_STORAGE_STATE_PATH", str(state_path))
+    monkeypatch.setenv("CT_STORAGE_STATE_B64", "from-env")
+
+    value, source = _resolve_storage_state_b64()
+
+    assert value == "from-file"
+    assert source == "file"
+
+
+def test_resolve_storage_state_falls_back_to_env(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "missing.b64"
+    monkeypatch.setenv("CT_STORAGE_STATE_PATH", str(state_path))
+    monkeypatch.setenv("CT_STORAGE_STATE_B64", "from-env")
+
+    value, source = _resolve_storage_state_b64()
+
+    assert value == "from-env"
+    assert source == "env"

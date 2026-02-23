@@ -19,13 +19,17 @@ services:
       - key: CT_AUTO_BACKFILL_SUMMARY_PATH
         value: /tmp/chesstempo/backfill-on-login.json
       - key: CT_STATS_URL
-        sync: false
+        value: https://chesstempo.com/stats/woutie70/
       - key: CT_STORAGE_STATE_B64
         sync: false
+      - key: CT_STORAGE_STATE_PATH
+        value: /tmp/chesstempo/storage_state.b64
       - key: CT_USERNAME
         sync: false
       - key: CT_PASSWORD
         sync: false
+      - key: CT_STORAGE_STATE_OUTPUT
+        value: /tmp/chesstempo/storage_state.b64
       - key: CT_TIMEZONE
         value: Europe/Amsterdam
       - key: PLAYWRIGHT_BROWSERS_PATH
@@ -37,16 +41,20 @@ services:
     plan: starter
     schedule: "0 4 * * *"
     buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings tzdata && pip install -r backend/integrations/chesstempo/requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright python -m playwright install chromium
-    startCommand: python -m backend.integrations.chesstempo.log_unlogged_days --headless --stats-url "$CT_STATS_URL" --summary-output /tmp/chesstempo/backfill.json --no-prompt
+    startCommand: python -m backend.integrations.chesstempo.log_unlogged_days --headless --stats-url "$CT_STATS_URL" --summary-output /tmp/chesstempo/backfill.json --storage-state-output "$CT_STORAGE_STATE_PATH" --no-prompt
     envVars:
       - key: CT_STATS_URL
-        sync: false
+        value: https://chesstempo.com/stats/woutie70/
       - key: CT_STORAGE_STATE_B64
         sync: false
+      - key: CT_STORAGE_STATE_PATH
+        value: /tmp/chesstempo/storage_state.b64
       - key: CT_USERNAME
         sync: false
       - key: CT_PASSWORD
         sync: false
+      - key: CT_STORAGE_STATE_OUTPUT
+        value: /tmp/chesstempo/storage_state.b64
       - key: CHESSDOJO_USERNAME
         sync: false
       - key: CHESSDOJO_PASSWORD

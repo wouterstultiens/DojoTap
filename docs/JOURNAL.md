@@ -1,4 +1,15 @@
 ## [2026-02-23]
+- Done: Added ChessTempo storage-state auto-rotation support (`--storage-state-output`, env `CT_STORAGE_STATE_OUTPUT`) in `fetch_attempts_csv.py` and threaded it through `log_unlogged_days.py`.
+- Done: Updated login-trigger auto-backfill to read storage-state from file first (`CT_STORAGE_STATE_PATH`), fallback to env `CT_STORAGE_STATE_B64`, and persist refreshed state back to file after successful runs.
+- Done: Wired `CT_STORAGE_STATE_PATH` and `CT_STORAGE_STATE_OUTPUT` into both Render web and cron services, and updated docs/.env examples.
+- Done: Added tests for storage-state source resolution in `backend/tests/test_ct_auto_backfill.py`.
+- Next: Deploy, login once in DojoTap, and confirm logs show `ct_auto_backfill` with `storage_state_source` plus successful backfill submission.
+
+## [2026-02-23]
+- Done: Set explicit `CT_STATS_URL` values in `render.yaml` for both `dojotap-api` and `dojotap-chesstempo-csv` so stats URL is guaranteed without manual secret entry.
+- Next: Ensure `dojotap-api` has either `CT_STORAGE_STATE_B64` or both `CT_USERNAME` + `CT_PASSWORD` set in Render dashboard, then login once and verify `ct_auto_backfill` success logs.
+
+## [2026-02-23]
 - Done: Added login-triggered ChessTempo backfill scheduler (`backend/app/ct_auto_backfill.py`) that runs `log_unlogged_days` on first `POST /api/auth/login` per day in `CT_TIMEZONE`.
 - Done: Wired `/api/auth/login` to schedule the background backfill job after successful ChessDojo login.
 - Done: Added persistent auto-backfill state/summary config in `Settings` (`CT_AUTO_BACKFILL_*`) and Render web-service env vars for `CT_*` integration data.

@@ -56,6 +56,7 @@ python -m backend.integrations.chesstempo.log_unlogged_days `
 ## Render env vars
 
 - `CT_STORAGE_STATE_B64` (primary auth path)
+- `CT_STORAGE_STATE_PATH` (file path for persisted/refreshed storage-state b64; defaults to `/tmp/chesstempo/storage_state.b64` on Render)
 - `CT_STATS_URL` (stats page URL)
 - Optional fallback: `CT_USERNAME`, `CT_PASSWORD`
 - Optional ChessDojo login: `CHESSDOJO_USERNAME`, `CHESSDOJO_PASSWORD`
@@ -67,6 +68,7 @@ For API login-triggered daily runs (`/api/auth/login` first login of day):
 - Optional state/summary targets:
   - `CT_AUTO_BACKFILL_STATE_PATH` (default `/tmp/dojotap-ct-auto-backfill-state.json`)
   - `CT_AUTO_BACKFILL_SUMMARY_PATH` (default `/tmp/chesstempo/backfill-on-login.json`)
+- Login-triggered runs auto-refresh storage state into `CT_STORAGE_STATE_PATH` so expired session state can self-heal.
 
 ## Render cron command
 
@@ -75,6 +77,7 @@ python -m backend.integrations.chesstempo.log_unlogged_days \
   --headless \
   --stats-url "$CT_STATS_URL" \
   --summary-output /tmp/chesstempo/backfill.json \
+  --storage-state-output "$CT_STORAGE_STATE_PATH" \
   --no-prompt
 ```
 

@@ -155,6 +155,7 @@ Login-triggered daily backfill (web service):
   - state: `CT_AUTO_BACKFILL_STATE_PATH` (default `/tmp/dojotap-ct-auto-backfill-state.json`)
   - summary: `CT_AUTO_BACKFILL_SUMMARY_PATH` (default `/tmp/chesstempo/backfill-on-login.json`)
 - Render logs also include JSON markers with `ct_auto_backfill: true` for `scheduled`, `already_attempted_today`, and final `success`/failure.
+- `CT_STORAGE_STATE_PATH` enables automatic ChessTempo session rotation: successful runs rewrite refreshed storage state there, and future runs load from this file first.
 
 ## Agent Visual Loop (Codex + Playwright MCP)
 `frontend/npm install` auto-runs `npm run setup:codex-mcp`, which ensures `.codex/config.toml` has a Playwright MCP server entry so Codex can inspect UI flows.

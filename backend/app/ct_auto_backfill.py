@@ -112,6 +112,7 @@ def _build_args(*, settings: Settings, username: str, password: str) -> argparse
         persist_refresh_token=True,
         force_refresh=False,
         no_prompt=True,
+        emit_result_stdout=False,
     )
 
 

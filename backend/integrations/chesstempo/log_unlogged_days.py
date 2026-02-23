@@ -270,6 +270,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Never prompt for missing ChessDojo credential field.",
     )
+    parser.add_argument(
+        "--emit-result-stdout",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Print full JSON run result to stdout (default: true).",
+    )
     return parser
 
 
@@ -454,7 +460,8 @@ async def _run(args: argparse.Namespace) -> int:
     if args.summary_output:
         _write_summary(args.summary_output, result)
 
-    print(json.dumps(result, ensure_ascii=True))
+    if bool(args.emit_result_stdout):
+        print(json.dumps(result, ensure_ascii=True))
     return 0
 
 

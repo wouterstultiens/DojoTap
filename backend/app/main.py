@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -143,14 +144,19 @@ async def bootstrap(request: Request) -> Any:
         )
 
     async def _load(client: ChessDojoClient, resolved_user_key: str) -> dict[str, Any]:
-        user_payload = await client.fetch_user()
-        requirements_payload = await client.fetch_requirements(scoreboard_only=False)
-        custom_access_payload: Any = {}
-        try:
-            custom_access_payload = await client.fetch_custom_access()
-        except HTTPException as exc:
-            if exc.status_code not in {403, 404}:
+        async def _fetch_custom_access_safe() -> dict[str, Any]:
+            try:
+                return await client.fetch_custom_access()
+            except HTTPException as exc:
+                if exc.status_code in {403, 404}:
+                    return {}
                 raise
+
+        user_payload, requirements_payload, custom_access_payload = await asyncio.gather(
+            client.fetch_user(),
+            client.fetch_requirements(scoreboard_only=False),
+            _fetch_custom_access_safe(),
+        )
         payload = format_bootstrap(
             user_payload,
             requirements_payload,
@@ -247,10 +253,12 @@ async def auth_login(request: Request, response: Response, payload: LoginRequest
     )
     _set_session_cookie(response, session_id)
     response.headers[SESSION_HEADER_NAME] = session_id
-    await maybe_schedule_on_login(
-        settings=settings,
-        username=payload.email,
-        password=payload.password,
+    asyncio.create_task(
+        maybe_schedule_on_login(
+            settings=settings,
+            username=payload.email,
+            password=payload.password,
+        )
     )
     return AuthStatusResponse(**status)
 

@@ -1,3 +1,11 @@
+## [2026-02-24]
+- Done: Pulled fresh Render logs for the `00:16` login and confirmed slow path was auth/bootstrap startup sequence (`POST /api/auth/login` followed by `GET /api/bootstrap` finishing ~4s later).
+- Done: Reduced bootstrap critical-path latency by fetching upstream ChessDojo payloads concurrently in `backend/app/main.py` (`/user`, `/requirements/ALL_COHORTS`, `/user/access/v2`).
+- Done: Removed login-path blocking from auto-backfill scheduling (`/api/auth/login` now fire-and-forget schedules `maybe_schedule_on_login`).
+- Done: Reduced API log/IO pressure by adding `--emit-result-stdout` to `log_unlogged_days.py` and disabling full JSON stdout for login-triggered auto-backfill.
+- Done: Verified with `pytest backend/tests/test_ct_auto_backfill.py backend/tests/test_chesstempo_log_unlogged_days.py` (10 passed).
+- Next: Deploy backend, run one fresh sign-in, and compare Render log timestamps for login/bootstrap completion to confirm lower end-to-end sign-in latency.
+
 ## [2026-02-23]
 - Done: Pulled Render logs and confirmed mobile auth failure pattern: `POST /api/auth/login` returned `200` but immediate `GET /api/bootstrap` returned `401` (session not carried on that client).
 - Done: Added session transport fallback for cookie-restricted clients: backend now exposes/accepts `X-DojoTap-Session`, and frontend stores/sends this header from localStorage on API calls.

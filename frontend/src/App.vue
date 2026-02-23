@@ -1007,9 +1007,10 @@ async function initializeApp(): Promise<void> {
     restoreTabPreference();
     loadTaskUiPreferences();
     restoreBootstrapCache();
-    await refreshAuthStatus();
-    if (authStatus.value?.authenticated) {
-      await loadBootstrap();
+    const bootstrapLoaded = await loadBootstrap();
+    if (bootstrapLoaded) {
+      // Keep auth chip updated without blocking the critical bootstrap path.
+      void refreshAuthStatus();
       finish({
         success: true,
         authenticated: true,
@@ -1017,6 +1018,9 @@ async function initializeApp(): Promise<void> {
         hasBootstrap: Boolean(bootstrapData.value),
       });
       return;
+    }
+    if (!authStatus.value) {
+      await refreshAuthStatus();
     }
     if (!bootstrapData.value) {
       authRequired.value = true;

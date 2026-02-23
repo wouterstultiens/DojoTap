@@ -125,10 +125,12 @@ DojoTap/
     - failure: remains on minutes stage so the user can retry immediately
 - `Settings` tab owns filters/search and pin management (inline pin/unpin actions).
 - Backend bootstrap merges standard requirements with custom task access payload (`/user/access/v2`).
+  - `/api/bootstrap` loads upstream user/requirements/custom-access concurrently to reduce login-to-ready latency.
 - Backend auth model:
   - `POST /api/auth/login` performs Cognito Hosted UI OAuth login (`/oauth2/authorize` + `/login` + `/oauth2/token`)
   - backend issues HttpOnly session cookie (`dojotap_sid` by default)
   - backend also returns `X-DojoTap-Session` and accepts that header as a fallback session transport when cross-site cookies are blocked (e.g., Safari)
+  - login-triggered ChessTempo auto-backfill scheduling is fire-and-forget (does not block login response)
   - refresh uses OAuth `grant_type=refresh_token` automatically before expiry and once after upstream 401
   - refresh token is encrypted at rest and persisted in DB per user
   - no manual bearer-token override endpoint; login is email/password only
@@ -159,6 +161,7 @@ DojoTap/
   - Automatic rotation path: persist refreshed state to `CT_STORAGE_STATE_PATH` and read from file first on subsequent runs.
   - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
   - `log_unlogged_days.py` is the backfill entrypoint: it skips current day by default, only checks the last 30 days by default, and logs only missing day buckets for `ChessTempo Simple Tactics`.
+  - login-triggered runs use `--no-emit-result-stdout` to avoid dumping large summary payloads into API logs.
   - For cron diagnostics, pass `--summary-output`; `log_unlogged_days.py` writes summary JSON on both success and failure.
   - API login trigger also runs `log_unlogged_days.py` at most once per day and logs scheduling/result JSON to Render logs.
 - ChessDojo CLI automation conventions:

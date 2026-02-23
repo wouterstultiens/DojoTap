@@ -14,7 +14,7 @@ cd ..
 
 # 3) Configure environment
 Copy-Item .env.example .env
-# CHESSDOJO_BEARER_TOKEN is now optional (manual fallback token mode)
+# Use CHESSDOJO email/password login in the UI
 
 # 4) Run backend
 .\.venv\Scripts\python -m uvicorn backend.app.main:app --reload
@@ -32,8 +32,8 @@ npm run e2e:smoke
 Open `http://localhost:5173`.
 
 At first load, if no valid token is available, DojoTap shows a local sign-in screen:
-- preferred: sign in with ChessDojo credentials (backend stores refresh token locally on your machine)
-- fallback: paste a manual bearer token
+- sign in with ChessDojo email + password (backend stores refresh token locally on your machine)
+- if task fetch takes longer than 10 seconds, DojoTap resets the local session and asks you to sign in again
 
 ## ChessDojo Automation Scripts (Separate Integration)
 For automation outside the web UI, use scripts in `backend/integrations/chessdojo/`.

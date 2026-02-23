@@ -66,11 +66,7 @@ export interface AuthStatusResponse {
 }
 
 export interface LoginRequest {
-  username: string;
+  email: string;
   password: string;
   persist_refresh_token: boolean;
-}
-
-export interface ManualTokenRequest {
-  token: string;
 }

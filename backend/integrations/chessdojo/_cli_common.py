@@ -59,7 +59,7 @@ async def resolve_bearer_token(
                 "(or CHESSDOJO_USERNAME and CHESSDOJO_PASSWORD)."
             )
         await auth_manager.login(
-            username=username,
+            email=username,
             password=password,
             persist_refresh_token=persist_refresh_token,
         )
@@ -116,4 +116,3 @@ def unwrap_error(exc: Exception) -> str:
     if isinstance(exc, HTTPException):
         return str(exc.detail)
     return str(exc)
-

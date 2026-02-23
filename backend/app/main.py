@@ -14,7 +14,6 @@ from .models import (
     AuthStatusResponse,
     HealthResponse,
     LoginRequest,
-    ManualTokenRequest,
     SubmitProgressRequest,
     SubmitProgressResponse,
 )
@@ -122,13 +121,13 @@ async def auth_status() -> AuthStatusResponse:
 @app.post("/api/auth/login", response_model=AuthStatusResponse)
 async def auth_login(payload: LoginRequest) -> AuthStatusResponse:
     status = await auth_manager.login(
-        username=payload.username,
+        email=payload.email,
         password=payload.password,
         persist_refresh_token=payload.persist_refresh_token,
     )
     await maybe_schedule_on_login(
         settings=settings,
-        username=payload.username,
+        username=payload.email,
         password=payload.password,
     )
     return AuthStatusResponse(**status)
@@ -137,16 +136,4 @@ async def auth_login(payload: LoginRequest) -> AuthStatusResponse:
 @app.post("/api/auth/logout", response_model=AuthStatusResponse)
 async def auth_logout() -> AuthStatusResponse:
     status = await auth_manager.logout()
-    return AuthStatusResponse(**status)
-
-
-@app.post("/api/auth/manual-token", response_model=AuthStatusResponse)
-async def auth_set_manual_token(payload: ManualTokenRequest) -> AuthStatusResponse:
-    status = await auth_manager.set_manual_token(payload.token)
-    return AuthStatusResponse(**status)
-
-
-@app.delete("/api/auth/manual-token", response_model=AuthStatusResponse)
-async def auth_clear_manual_token() -> AuthStatusResponse:
-    status = await auth_manager.clear_manual_token()
     return AuthStatusResponse(**status)

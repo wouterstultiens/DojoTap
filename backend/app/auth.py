@@ -32,7 +32,6 @@ class LocalAuthManager:
         self._lock = asyncio.Lock()
         self._auth_state_path = settings.resolved_auth_state_path()
 
-        self._manual_bearer_token = ""
         self._session_tokens: SessionTokens | None = None
         self._persisted_refresh_token: str | None = None
         self._persisted_username: str | None = None
@@ -40,10 +39,6 @@ class LocalAuthManager:
 
     async def get_bearer_token(self, force_refresh: bool = False) -> str:
         async with self._lock:
-            manual_token = self._manual_bearer_token.strip()
-            if manual_token:
-                return manual_token
-
             if not force_refresh and self._has_valid_session_token():
                 assert self._session_tokens is not None
                 return self._session_tokens.bearer_token
@@ -59,43 +54,38 @@ class LocalAuthManager:
                         raise
                     self._clear_session_locked(clear_refresh_state=True)
 
-            fallback_token = self._settings.normalized_bearer_token()
-            if fallback_token:
-                return fallback_token
-
             raise HTTPException(
                 status_code=401,
                 detail=(
-                    "Authentication required. Sign in with your ChessDojo credentials "
-                    "or provide a manual bearer token."
+                    "Authentication required. Sign in with your ChessDojo email and password."
                 ),
             )
 
     async def login(
         self,
-        username: str,
+        email: str,
         password: str,
         persist_refresh_token: bool = True,
     ) -> dict[str, Any]:
-        normalized_username = username.strip()
-        if not normalized_username:
-            raise HTTPException(status_code=422, detail="Username is required.")
+        normalized_email = email.strip()
+        if not normalized_email:
+            raise HTTPException(status_code=422, detail="Email is required.")
         if not password:
             raise HTTPException(status_code=422, detail="Password is required.")
 
         async with self._lock:
             token_payload = await self._oauth_login_with_credentials(
-                username=normalized_username,
+                username=normalized_email,
                 password=password,
             )
             self._apply_oauth_token_payload_locked(
                 token_payload=token_payload,
-                username=normalized_username,
+                username=normalized_email,
                 fallback_refresh_token=None,
             )
             if persist_refresh_token and self._session_tokens and self._session_tokens.refresh_token:
                 self._persisted_refresh_token = self._session_tokens.refresh_token
-                self._persisted_username = normalized_username
+                self._persisted_username = normalized_email
                 self._persist_refresh_state()
             if not persist_refresh_token:
                 self._persisted_refresh_token = None
@@ -105,42 +95,20 @@ class LocalAuthManager:
     async def logout(self) -> dict[str, Any]:
         async with self._lock:
             self._clear_session_locked(clear_refresh_state=True)
-            self._manual_bearer_token = ""
-            return self.status()
-
-    async def set_manual_token(self, token: str) -> dict[str, Any]:
-        normalized_token = self._settings.normalized_token_value(token)
-        if not normalized_token:
-            raise HTTPException(status_code=422, detail="Manual token is empty.")
-        async with self._lock:
-            self._manual_bearer_token = normalized_token
-            return self.status()
-
-    async def clear_manual_token(self) -> dict[str, Any]:
-        async with self._lock:
-            self._manual_bearer_token = ""
             return self.status()
 
     def has_any_auth_configured(self) -> bool:
         return (
-            bool(self._manual_bearer_token.strip())
-            or self._has_valid_session_token()
+            self._has_valid_session_token()
             or bool(self._resolve_refresh_token())
-            or bool(self._settings.normalized_bearer_token())
         )
 
     def status(self) -> dict[str, Any]:
         auth_mode = "none"
         authenticated = False
 
-        if self._manual_bearer_token.strip():
-            auth_mode = "manual"
-            authenticated = True
-        elif self._has_valid_session_token() or self._resolve_refresh_token():
+        if self._has_valid_session_token() or self._resolve_refresh_token():
             auth_mode = "session"
-            authenticated = True
-        elif self._settings.normalized_bearer_token():
-            auth_mode = "env"
             authenticated = True
 
         username = None

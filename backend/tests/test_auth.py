@@ -1,24 +1,25 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 from backend.app.auth import LocalAuthManager
 from backend.app.config import Settings
 
 
-def _make_settings(tmp_path: Path, env_token: str = "") -> Settings:
+def _make_settings(tmp_path: Path) -> Settings:
     return Settings(
-        chessdojo_bearer_token=env_token,
         local_auth_state_path=str(tmp_path / "auth_state.json"),
     )
 
 
-def test_manual_token_takes_priority_over_env(tmp_path: Path) -> None:
-    manager = LocalAuthManager(_make_settings(tmp_path, env_token="env-token"))
-
-    asyncio.run(manager.set_manual_token("Bearer manual-token"))
-    token = asyncio.run(manager.get_bearer_token())
-
-    assert token == "manual-token"
+def test_requires_login_when_no_session_or_refresh(tmp_path: Path) -> None:
+    manager = LocalAuthManager(_make_settings(tmp_path))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(manager.get_bearer_token())
+    assert exc_info.value.status_code == 401
+    assert "email and password" in str(exc_info.value.detail)
 
 
 def test_login_uses_id_token_and_persists_refresh_token(tmp_path: Path, monkeypatch) -> None:
@@ -40,7 +41,7 @@ def test_login_uses_id_token_and_persists_refresh_token(tmp_path: Path, monkeypa
 
     status = asyncio.run(
         manager.login(
-            username="user@example.com",
+            email="user@example.com",
             password="secret-password",
             persist_refresh_token=True,
         )
@@ -83,7 +84,7 @@ def test_refresh_flow_renews_expired_session(tmp_path: Path, monkeypatch) -> Non
 
     asyncio.run(
         manager.login(
-            username="user@example.com",
+            email="user@example.com",
             password="secret-password",
             persist_refresh_token=True,
         )
@@ -95,9 +96,3 @@ def test_refresh_flow_renews_expired_session(tmp_path: Path, monkeypatch) -> Non
 
     assert token == "id-token-refresh"
     assert calls == ["login", "refresh"]
-
-
-def test_env_token_fallback_when_no_session(tmp_path: Path) -> None:
-    manager = LocalAuthManager(_make_settings(tmp_path, env_token="Bearer env-token"))
-    token = asyncio.run(manager.get_bearer_token())
-    assert token == "env-token"

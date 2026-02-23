@@ -1,4 +1,11 @@
 ## [2026-02-23]
+- Done: Removed manual bearer-token auth override from DojoTap API/UI; login now accepts email + password only (`/api/auth/login` payload uses `email`).
+- Done: Removed backend fallback to manual/env bearer tokens in `LocalAuthManager`; auth mode is now session-based only.
+- Done: Added frontend bootstrap fetch timeout handling (10 seconds); on timeout DojoTap aborts fetch, logs out local session, and returns to sign-in with a clear retry message.
+- Done: Updated docs (`README.md`, `docs/CONTEXT.md`, `docs/API_NOTES.md`, `.env.example`) to reflect email/password-only login.
+- Next: Deploy and verify in production that a forced slow `/api/bootstrap` call (>10s) moves UI back to sign-in and that re-login immediately restores tasks.
+
+## [2026-02-23]
 - Done: Added ChessTempo storage-state auto-rotation support (`--storage-state-output`, env `CT_STORAGE_STATE_OUTPUT`) in `fetch_attempts_csv.py` and threaded it through `log_unlogged_days.py`.
 - Done: Updated login-trigger auto-backfill to read storage-state from file first (`CT_STORAGE_STATE_PATH`), fallback to env `CT_STORAGE_STATE_B64`, and persist refreshed state back to file after successful runs.
 - Done: Wired `CT_STORAGE_STATE_PATH` and `CT_STORAGE_STATE_OUTPUT` into both Render web and cron services, and updated docs/.env examples.

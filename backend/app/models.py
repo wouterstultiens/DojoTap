@@ -58,10 +58,6 @@ class AuthStatusResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1)
+    email: str = Field(min_length=1)
     password: str = Field(min_length=1)
     persist_refresh_token: bool = True
-
-
-class ManualTokenRequest(BaseModel):
-    token: str = Field(min_length=1)

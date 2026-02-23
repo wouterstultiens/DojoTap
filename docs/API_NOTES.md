@@ -6,9 +6,8 @@
 ## Auth
 - Header: `Authorization: Bearer <token>`
 - Token sources in this project (priority order):
-  1. Manual override token (`POST /api/auth/manual-token`)
-  2. Local session token from Cognito login (`POST /api/auth/login`)
-  3. Fallback `.env` token (`CHESSDOJO_BEARER_TOKEN`)
+  1. Local session token from Cognito login (`POST /api/auth/login`, email + password)
+  2. Local refresh-token renewal (`grant_type=refresh_token`)
 
 ### Cognito Login/Refresh (Used by DojoTap Backend)
 - Region: `us-east-1`

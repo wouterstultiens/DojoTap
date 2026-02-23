@@ -2,12 +2,11 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import {
-  clearManualToken,
+  BootstrapTimeoutError,
   fetchAuthStatus,
   fetchBootstrap,
   loginWithCredentials,
   logoutAuth,
-  setManualToken,
   submitProgress,
 } from "./api";
 import {
@@ -53,10 +52,9 @@ const authRequired = ref(false);
 const authBusy = ref(false);
 const authError = ref("");
 const authStatus = ref<AuthStatusResponse | null>(null);
-const loginUsername = ref("");
+const loginEmail = ref("");
 const loginPassword = ref("");
 const rememberRefreshToken = ref(true);
-const manualTokenInput = ref("");
 
 const activeTab = ref<AppTab>("pinned");
 
@@ -350,6 +348,21 @@ async function refreshAuthStatus(): Promise<void> {
   }
 }
 
+async function forceReLoginAfterSlowFetch(error: BootstrapTimeoutError): Promise<void> {
+  const message = `${error.message} Session reset. Please sign in again.`;
+  bootstrapData.value = null;
+  resetFlow();
+  authRequired.value = true;
+  fetchError.value = message;
+  try {
+    authStatus.value = await logoutAuth();
+  } catch {
+    // Ignore logout failure; we still force sign-in UI.
+  }
+  await refreshAuthStatus();
+  authError.value = message;
+}
+
 async function loadBootstrap(): Promise<boolean> {
   loading.value = true;
   fetchError.value = "";
@@ -364,6 +377,10 @@ async function loadBootstrap(): Promise<boolean> {
     reconcileTaskUiPreferences(payload.tasks.map((task) => task.id));
     return true;
   } catch (error) {
+    if (error instanceof BootstrapTimeoutError) {
+      await forceReLoginAfterSlowFetch(error);
+      return false;
+    }
     bootstrapData.value = null;
     fetchError.value = error instanceof Error ? error.message : String(error);
     if (isAuthErrorMessage(fetchError.value)) {
@@ -381,7 +398,7 @@ async function loginFromCredentials(): Promise<void> {
   authError.value = "";
   try {
     authStatus.value = await loginWithCredentials({
-      username: loginUsername.value.trim(),
+      email: loginEmail.value.trim(),
       password: loginPassword.value,
       persist_refresh_token: rememberRefreshToken.value,
     });
@@ -389,34 +406,6 @@ async function loginFromCredentials(): Promise<void> {
     if (authStatus.value.authenticated) {
       await loadBootstrap();
     }
-  } catch (error) {
-    authError.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    authBusy.value = false;
-  }
-}
-
-async function applyManualToken(): Promise<void> {
-  authBusy.value = true;
-  authError.value = "";
-  try {
-    authStatus.value = await setManualToken({ token: manualTokenInput.value });
-    manualTokenInput.value = "";
-    if (authStatus.value.authenticated) {
-      await loadBootstrap();
-    }
-  } catch (error) {
-    authError.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    authBusy.value = false;
-  }
-}
-
-async function clearManualTokenOverride(): Promise<void> {
-  authBusy.value = true;
-  authError.value = "";
-  try {
-    authStatus.value = await clearManualToken();
   } catch (error) {
     authError.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -485,21 +474,14 @@ const completedPinnedCount = computed(() =>
 );
 const authModeLabel = computed(() => {
   if (!authStatus.value) {
-    return bootstrapData.value ? "Active" : "Signed out";
+    return bootstrapData.value ? "Signed in" : "Signed out";
   }
   const mode = authStatus.value?.auth_mode ?? "none";
   if (mode === "session") {
     return "Session";
   }
-  if (mode === "manual") {
-    return "Manual token";
-  }
-  if (mode === "env") {
-    return ".env token";
-  }
   return "Signed out";
 });
-const hasManualOverride = computed(() => authStatus.value?.auth_mode === "manual");
 
 const userDisplayName = computed(() => bootstrapData.value?.user.display_name?.trim() || "Dojo Member");
 const userCohort = computed(() => bootstrapData.value?.user.dojo_cohort ?? "");
@@ -800,7 +782,7 @@ void loadBootstrap();
       <section class="auth-card">
         <h2>Sign in</h2>
         <p class="auth-copy">
-          DojoTap is running in private mode. Sign in to fetch a fresh bearer token locally.
+          DojoTap is running in private mode. Sign in with your ChessDojo account.
         </p>
         <p v-if="authStatus?.username" class="auth-copy">Saved account: {{ authStatus.username }}</p>
         <p v-if="authError" class="notice error">{{ authError }}</p>
@@ -808,7 +790,7 @@ void loadBootstrap();
         <form class="auth-form" @submit.prevent="loginFromCredentials">
           <label>
             ChessDojo email
-            <input v-model.trim="loginUsername" type="email" autocomplete="username" required />
+            <input v-model.trim="loginEmail" type="email" autocomplete="username" required />
           </label>
 
           <label>
@@ -829,34 +811,7 @@ void loadBootstrap();
           <button type="submit" class="ghost-btn" :disabled="authBusy">
             {{ authBusy ? "Signing in..." : "Sign in" }}
           </button>
-        </form>
-
-        <div class="auth-divider">or</div>
-
-        <form class="auth-form" @submit.prevent="applyManualToken">
-          <label>
-            Manual bearer token (fallback)
-            <input
-              v-model.trim="manualTokenInput"
-              type="password"
-              placeholder="Paste token or Bearer token"
-              autocomplete="off"
-              required
-            />
-          </label>
           <div class="auth-actions">
-            <button type="submit" class="ghost-btn" :disabled="authBusy">
-              {{ authBusy ? "Applying..." : "Use manual token" }}
-            </button>
-            <button
-              v-if="hasManualOverride"
-              type="button"
-              class="ghost-btn"
-              :disabled="authBusy"
-              @click="clearManualTokenOverride"
-            >
-              Clear manual token
-            </button>
             <button type="button" class="ghost-btn" :disabled="authBusy" @click="refreshAuthStatus">
               Refresh status
             </button>

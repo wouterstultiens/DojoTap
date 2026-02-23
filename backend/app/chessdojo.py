@@ -17,7 +17,12 @@ class ChessDojoClient:
 
     @property
     def _headers(self) -> dict[str, str]:
-        bearer_token = self._bearer_token or self._settings.normalized_bearer_token()
+        bearer_token = self._bearer_token.strip()
+        if not bearer_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required. Sign in with your ChessDojo email and password.",
+            )
         return {"Authorization": f"Bearer {bearer_token}"}
 
     async def fetch_user(self) -> dict[str, Any]:
@@ -49,11 +54,7 @@ class ChessDojoClient:
             if exc.response.status_code == 401:
                 raise HTTPException(
                     status_code=401,
-                    detail=(
-                        "ChessDojo unauthorized. Refresh your bearer token and set "
-                        "CHESSDOJO_BEARER_TOKEN in .env (raw token or 'Bearer <token>' "
-                        "both supported). Then restart the backend."
-                    ),
+                    detail="ChessDojo unauthorized. Please sign in again with email and password.",
                 ) from exc
             raise HTTPException(
                 status_code=exc.response.status_code,
@@ -81,11 +82,7 @@ class ChessDojoClient:
             if exc.response.status_code == 401:
                 raise HTTPException(
                     status_code=401,
-                    detail=(
-                        "ChessDojo unauthorized. Refresh your bearer token and set "
-                        "CHESSDOJO_BEARER_TOKEN in .env (raw token or 'Bearer <token>' "
-                        "both supported). Then restart the backend."
-                    ),
+                    detail="ChessDojo unauthorized. Please sign in again with email and password.",
                 ) from exc
             raise HTTPException(
                 status_code=exc.response.status_code,

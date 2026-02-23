@@ -1,4 +1,11 @@
 ## [2026-02-23]
+- Done: Switched Render cron service `dojotap-chesstempo-csv` to run `backend.integrations.chesstempo.log_unlogged_days` daily instead of CSV-only fetch.
+- Done: Updated cron build deps to include backend app requirements needed by `log_unlogged_days` (`fastapi`, `httpx`, `pydantic-settings`, `tzdata`) plus Playwright.
+- Done: Added failure-summary persistence in `log_unlogged_days.py` so `--summary-output` is written on both success and failure (includes `error_type` + `traceback` on failure).
+- Done: Updated `README.md`, `docs/CONTEXT.md`, and `backend/integrations/chesstempo/README.md` for the new daily backfill + diagnostics flow.
+- Next: Trigger one production cron run and verify the intentionally removed latest day is recreated; confirm Render logs and `/tmp/chesstempo/backfill.json` show `ok: true`.
+
+## [2026-02-23]
 - Done: Updated `backend/integrations/chesstempo/log_unlogged_days.py` to only consider the most recent 30 days by default (`--lookback-days`, env `CT_LOOKBACK_DAYS`) before backfilling missing logs.
 - Done: Added lookback-window test coverage in `backend/tests/test_chesstempo_log_unlogged_days.py`.
 - Done: Updated `README.md`, `docs/CONTEXT.md`, and `backend/integrations/chesstempo/README.md` to document 30-day default backfill behavior.

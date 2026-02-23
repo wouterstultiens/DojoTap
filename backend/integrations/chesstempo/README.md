@@ -65,21 +65,15 @@ python -m backend.integrations.chesstempo.log_unlogged_days `
 ## Render cron command
 
 ```bash
-python -m backend.integrations.chesstempo.fetch_attempts_csv \
-  --headless \
-  --stats-url "$CT_STATS_URL" \
-  --output /tmp/chesstempo/download.csv \
-  --summary-output /tmp/chesstempo/summary.json
-```
-
-Backfill variant:
-
-```bash
 python -m backend.integrations.chesstempo.log_unlogged_days \
   --headless \
   --stats-url "$CT_STATS_URL" \
-  --summary-output /tmp/chesstempo/backfill.json
+  --summary-output /tmp/chesstempo/backfill.json \
+  --no-prompt
 ```
+
+`/tmp/chesstempo/backfill.json` is written on both success and failure.
+On failure it contains `ok: false`, `error`, and `traceback` for diagnostics.
 
 ## JSON output contract
 

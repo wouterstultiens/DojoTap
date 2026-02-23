@@ -1,6 +1,9 @@
+import json
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from backend.integrations.chesstempo.log_unlogged_days import (
+    _write_summary,
     build_backfill_date,
     extract_logged_days,
     select_unlogged_days,
@@ -80,3 +83,13 @@ def test_select_unlogged_days_applies_earliest_day_limit() -> None:
         {"date": "2026-02-22", "adjusted_minutes": 2, "exercises": 2},
         {"date": "2026-02-23", "adjusted_minutes": 2, "exercises": 2},
     ]
+
+
+def test_write_summary_writes_json_file(tmp_path: Path) -> None:
+    output_path = tmp_path / "result" / "summary.json"
+    payload = {"ok": False, "error": "boom"}
+
+    _write_summary(str(output_path), payload)
+
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+    assert written == payload

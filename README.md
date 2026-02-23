@@ -143,7 +143,8 @@ Then run without `--dry-run` to submit missing days.
 Render notes:
 - `render.yaml` includes a separate cron service: `dojotap-chesstempo-csv`.
 - Render cron services require a paid plan (`starter`), not free tier.
-- Set at least: `CT_STATS_URL`, `CT_STORAGE_STATE_B64`.
+- Cron runs `log_unlogged_days` daily and writes diagnostics to `/tmp/chesstempo/backfill.json`.
+- Set at least: `CT_STATS_URL`, `CT_STORAGE_STATE_B64`, `CHESSDOJO_USERNAME`, `CHESSDOJO_PASSWORD`.
 - Optional fallback: `CT_USERNAME`, `CT_PASSWORD`.
 
 ## Agent Visual Loop (Codex + Playwright MCP)

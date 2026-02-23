@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import sys
+import traceback
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,20 @@ def _to_int(value: Any, fallback: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _write_summary(path_value: str | None, payload: dict[str, Any]) -> None:
+    if not path_value:
+        return
+    try:
+        summary_path = Path(path_value).expanduser().resolve()
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -431,12 +446,7 @@ async def _run(args: argparse.Namespace) -> int:
     }
 
     if args.summary_output:
-        summary_path = Path(args.summary_output).expanduser().resolve()
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
-        summary_path.write_text(
-            json.dumps(result, indent=2, ensure_ascii=True) + "\n",
-            encoding="utf-8",
-        )
+        _write_summary(args.summary_output, result)
 
     print(json.dumps(result, ensure_ascii=True))
     return 0
@@ -448,7 +458,18 @@ def main() -> None:
         exit_code = asyncio.run(_run(args))
     except Exception as exc:
         message = unwrap_error(exc)
-        print(json.dumps({"ok": False, "error": message}, ensure_ascii=True), file=sys.stderr)
+        error_payload: dict[str, Any] = {
+            "ok": False,
+            "error": message,
+            "error_type": type(exc).__name__,
+            "task": args.task,
+            "timezone": args.timezone,
+            "dry_run": bool(args.dry_run),
+            "lookback_days": args.lookback_days,
+            "traceback": "".join(traceback.format_exception(exc)),
+        }
+        _write_summary(args.summary_output, error_payload)
+        print(json.dumps(error_payload, ensure_ascii=True), file=sys.stderr)
         raise SystemExit(1) from exc
     raise SystemExit(exit_code)
 

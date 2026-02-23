@@ -24,7 +24,7 @@
   - GitHub Pages via `.github/workflows/deploy-pages.yml` (frontend static build only)
   - Render Blueprint via `render.yaml`:
     - `dojotap-api` web service (free tier)
-    - `dojotap-chesstempo-csv` cron service (starter tier; scheduled CSV fetch)
+    - `dojotap-chesstempo-csv` cron service (starter tier; daily `log_unlogged_days` backfill run)
 
 ## Strict Constraints
 - Do not store bearer tokens in repo files.
@@ -146,6 +146,7 @@ DojoTap/
   - Primary auth path is `CT_STORAGE_STATE_B64`; rotate it when sessions expire.
   - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
   - `log_unlogged_days.py` is the backfill entrypoint: it skips current day by default, only checks the last 30 days by default, and logs only missing day buckets for `ChessTempo Simple Tactics`.
+  - For cron diagnostics, pass `--summary-output`; `log_unlogged_days.py` writes summary JSON on both success and failure.
 - ChessDojo CLI automation conventions:
   - Keep standalone token/progress scripts under `backend/integrations/chessdojo`.
   - Reuse backend auth and payload helpers (`LocalAuthManager`, `build_progress_payload`) instead of duplicating logic.

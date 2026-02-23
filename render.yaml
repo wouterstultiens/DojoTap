@@ -18,8 +18,8 @@ services:
     runtime: python
     plan: starter
     schedule: "0 4 * * *"
-    buildCommand: pip install --upgrade pip && pip install -r backend/integrations/chesstempo/requirements.txt && python -m playwright install chromium
-    startCommand: python -m backend.integrations.chesstempo.fetch_attempts_csv --headless --stats-url "$CT_STATS_URL" --output /tmp/chesstempo/download.csv --summary-output /tmp/chesstempo/summary.json
+    buildCommand: pip install --upgrade pip && pip install fastapi httpx pydantic-settings tzdata && pip install -r backend/integrations/chesstempo/requirements.txt && python -m playwright install chromium
+    startCommand: python -m backend.integrations.chesstempo.log_unlogged_days --headless --stats-url "$CT_STATS_URL" --summary-output /tmp/chesstempo/backfill.json --no-prompt
     envVars:
       - key: CT_STATS_URL
         sync: false
@@ -28,6 +28,10 @@ services:
       - key: CT_USERNAME
         sync: false
       - key: CT_PASSWORD
+        sync: false
+      - key: CHESSDOJO_USERNAME
+        sync: false
+      - key: CHESSDOJO_PASSWORD
         sync: false
       - key: CT_TIMEZONE
         value: Europe/Amsterdam

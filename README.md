@@ -58,6 +58,12 @@ python -m backend.integrations.chessdojo.log_progress `
   --minutes 45
 ```
 
+Get full progress entries for a task (timeline):
+```powershell
+python -m backend.integrations.chessdojo.get_progress `
+  --task "ChessTempo Simple Tactics"
+```
+
 Full CLI details: `backend/integrations/chessdojo/README.md`.
 
 ## GitHub Pages

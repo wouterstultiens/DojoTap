@@ -6,6 +6,7 @@ Standalone scripts for automation flows outside the FastAPI web app.
 
 - `fetch_bearer_token.py`: resolve a usable bearer token
 - `log_progress.py`: submit time-only or count+time progress by task name
+- `get_progress.py`: fetch full progress timeline entries for a task (Bruno `Get Progress` endpoint)
 
 ## Fetch bearer token
 
@@ -55,3 +56,26 @@ python -m backend.integrations.chessdojo.log_progress `
   --dry-run
 ```
 
+## Get full progress for a task
+
+Uses:
+- `GET /public/user/{user_id}/timeline` (same endpoint as `bruno/ChessDojo/Get Progress.yml`)
+
+By task name:
+
+```powershell
+python -m backend.integrations.chessdojo.get_progress `
+  --task "ChessTempo Simple Tactics"
+```
+
+By task id:
+
+```powershell
+python -m backend.integrations.chessdojo.get_progress `
+  --task-id "7d1d3478-7b9b-4155-9896-a2b1408357e8"
+```
+
+Optional:
+- `--limit 20` to cap returned entries
+- `--user-id <id>` to inspect another public profile timeline
+- `--include-unfiltered` to include total raw timeline entry count

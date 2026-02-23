@@ -63,6 +63,7 @@ DojoTap/
       chessdojo/
         fetch_bearer_token.py # CLI token fetch via local auth flow
         log_progress.py       # CLI progress submit by task name
+        get_progress.py       # CLI full task timeline fetch via /public/user/{id}/timeline
         README.md             # automation usage for token/progress scripts
       chesstempo/
         fetch_attempts_csv.py # Playwright-based CSV fetch + parse summary JSON
@@ -145,6 +146,7 @@ DojoTap/
 - ChessDojo CLI automation conventions:
   - Keep standalone token/progress scripts under `backend/integrations/chessdojo`.
   - Reuse backend auth and payload helpers (`LocalAuthManager`, `build_progress_payload`) instead of duplicating logic.
+  - Full per-task history retrieval uses `GET /public/user/{user_id}/timeline` and filters by `requirementId`.
   - Prefer JSON stdout/stderr outputs for automation chaining.
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

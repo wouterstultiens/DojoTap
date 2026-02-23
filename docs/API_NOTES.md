@@ -63,6 +63,18 @@
 - DojoTap merges these custom tasks with the standard requirements list for bootstrap and submit lookup.
 - Some custom tasks are timer-only (no count increment); for these, DojoTap submits `previousCount == newCount` with minutes only.
 
+### 5) `GET /public/user/{userId}/timeline`
+- Used for full history retrieval per task (as in `bruno/ChessDojo/Get Progress.yml`).
+- Returns object with `entries: []`.
+- `userId` maps to `user.username` from `GET /user`.
+- Useful fields per entry:
+  - `requirementId`
+  - `requirementName`
+  - `requirementCategory`
+  - `previousCount`, `newCount`
+  - `minutesSpent`, `totalMinutesSpent`
+  - `date`, `createdAt`
+
 ## Previous Count Resolution Rule
 When posting progress in DojoTap:
 1. Prefer `user.progress[requirementId].counts[dojoCohort]`

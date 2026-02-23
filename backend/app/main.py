@@ -31,6 +31,7 @@ auth_manager = LocalAuthManager(
     session_factory=database.session_factory,
     token_cipher=TokenCipher(settings.auth_state_encryption_key),
 )
+SESSION_HEADER_NAME = "X-DojoTap-Session"
 
 
 @asynccontextmanager
@@ -49,11 +50,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[SESSION_HEADER_NAME],
 )
 
 
 def _session_id_from_request(request: Request) -> str | None:
-    return request.cookies.get(settings.session_cookie_name)
+    cookie_session_id = (request.cookies.get(settings.session_cookie_name) or "").strip()
+    if cookie_session_id:
+        return cookie_session_id
+    header_session_id = (request.headers.get(SESSION_HEADER_NAME) or "").strip()
+    if header_session_id:
+        return header_session_id
+    return None
 
 
 def _set_session_cookie(response: Response, session_id: str) -> None:
@@ -238,6 +246,7 @@ async def auth_login(request: Request, response: Response, payload: LoginRequest
         persist_refresh_token=payload.persist_refresh_token,
     )
     _set_session_cookie(response, session_id)
+    response.headers[SESSION_HEADER_NAME] = session_id
     await maybe_schedule_on_login(
         settings=settings,
         username=payload.email,

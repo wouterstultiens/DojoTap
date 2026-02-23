@@ -128,6 +128,7 @@ DojoTap/
 - Backend auth model:
   - `POST /api/auth/login` performs Cognito Hosted UI OAuth login (`/oauth2/authorize` + `/login` + `/oauth2/token`)
   - backend issues HttpOnly session cookie (`dojotap_sid` by default)
+  - backend also returns `X-DojoTap-Session` and accepts that header as a fallback session transport when cross-site cookies are blocked (e.g., Safari)
   - refresh uses OAuth `grant_type=refresh_token` automatically before expiry and once after upstream 401
   - refresh token is encrypted at rest and persisted in DB per user
   - no manual bearer-token override endpoint; login is email/password only

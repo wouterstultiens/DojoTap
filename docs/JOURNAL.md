@@ -1,4 +1,11 @@
 ## [2026-02-23]
+- Done: Pulled Render logs and confirmed mobile auth failure pattern: `POST /api/auth/login` returned `200` but immediate `GET /api/bootstrap` returned `401` (session not carried on that client).
+- Done: Added session transport fallback for cookie-restricted clients: backend now exposes/accepts `X-DojoTap-Session`, and frontend stores/sends this header from localStorage on API calls.
+- Done: Added CORS `expose_headers` for `X-DojoTap-Session` and documented the fallback in `README.md` + `docs/CONTEXT.md`.
+- Done: Re-verified with `pytest backend/tests/test_auth.py` and `npm run build`.
+- Next: Deploy backend + frontend, then verify iPhone Safari login keeps session across `POST /api/auth/login` -> `GET /api/bootstrap` and no longer loops back to sign-in.
+
+## [2026-02-23]
 - Done: Pulled Render `dojotap-api` logs and traced login failure to Postgres FK violation (`browser_session.user_key` -> missing `user_auth_state` row) during `POST /api/auth/login`.
 - Done: Fixed backend login transaction ordering by flushing `UserAuthState` before inserting `BrowserSession` in `backend/app/auth.py`.
 - Done: Re-ran auth tests (`pytest backend/tests/test_auth.py`) and confirmed pass.

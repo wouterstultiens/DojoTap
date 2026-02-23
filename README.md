@@ -32,7 +32,7 @@ npm run e2e:smoke
 Open `http://localhost:5173`.
 
 At first load, if no valid token is available, DojoTap shows a local sign-in screen:
-- sign in with ChessDojo email + password (backend sets an HttpOnly session cookie and persists encrypted refresh token)
+- sign in with ChessDojo email + password (backend sets an HttpOnly session cookie, persists encrypted refresh token, and falls back to `X-DojoTap-Session` transport when cross-site cookies are blocked)
 - when bootstrap is slow/unavailable, DojoTap keeps cached tasks in read-only mode and retries instead of forcing logout
 - cross-device settings sync is enabled for pinned tasks and per-task UI preferences
 

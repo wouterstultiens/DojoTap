@@ -60,6 +60,10 @@ DojoTap/
     scripts/
       api_smoke.py     # Repeat GET checks against ChessDojo API
     integrations/
+      chessdojo/
+        fetch_bearer_token.py # CLI token fetch via local auth flow
+        log_progress.py       # CLI progress submit by task name
+        README.md             # automation usage for token/progress scripts
       chesstempo/
         fetch_attempts_csv.py # Playwright-based CSV fetch + parse summary JSON
         requirements.txt      # Integration-only dependency list
@@ -138,5 +142,9 @@ DojoTap/
   - Keep ChessTempo logic under `backend/integrations/chesstempo` (no coupling to FastAPI route handlers).
   - Primary auth path is `CT_STORAGE_STATE_B64`; rotate it when sessions expire.
   - CSV summary output contract is JSON with per-day `exercises` and `adjusted_minutes` totals in `Europe/Amsterdam` by default.
+- ChessDojo CLI automation conventions:
+  - Keep standalone token/progress scripts under `backend/integrations/chessdojo`.
+  - Reuse backend auth and payload helpers (`LocalAuthManager`, `build_progress_payload`) instead of duplicating logic.
+  - Prefer JSON stdout/stderr outputs for automation chaining.
 - Document new API discoveries in `docs/API_NOTES.md`.
 - Update `docs/JOURNAL.md` at end of each working session.

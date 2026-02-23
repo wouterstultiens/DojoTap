@@ -35,6 +35,31 @@ At first load, if no valid token is available, DojoTap shows a local sign-in scr
 - preferred: sign in with ChessDojo credentials (backend stores refresh token locally on your machine)
 - fallback: paste a manual bearer token
 
+## ChessDojo Automation Scripts (Separate Integration)
+For automation outside the web UI, use scripts in `backend/integrations/chessdojo/`.
+
+Fetch a bearer token:
+```powershell
+python -m backend.integrations.chessdojo.fetch_bearer_token --format bearer
+```
+
+Log time-only progress by task name:
+```powershell
+python -m backend.integrations.chessdojo.log_progress `
+  --task "ChessTempo Simple Tactics" `
+  --minutes 20
+```
+
+Log count + time by task name:
+```powershell
+python -m backend.integrations.chessdojo.log_progress `
+  --task "Polgar 5334 Problems, 1100-1200, all by themes" `
+  --count 12 `
+  --minutes 45
+```
+
+Full CLI details: `backend/integrations/chessdojo/README.md`.
+
 ## GitHub Pages
 The repo includes `.github/workflows/deploy-pages.yml` to deploy the Vue frontend from `frontend/` to GitHub Pages.
 

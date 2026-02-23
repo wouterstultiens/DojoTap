@@ -1,3 +1,10 @@
+## [2026-02-23]
+- Done: Added standalone ChessDojo integration CLIs under `backend/integrations/chessdojo` for bearer token fetch and progress logging by task name.
+- Done: Reused existing backend auth/token refresh + payload logic so local/Render behavior matches FastAPI flow.
+- Done: Hardened settings env parsing to support UTF-8 BOM `.env` files and ignore unrelated extra env keys so auth scripts/bootstrap do not fail on local `.env` noise.
+- Done: Documented CLI usage in `README.md`, `docs/CONTEXT.md`, and `backend/integrations/chessdojo/README.md`.
+- Next: Run a live end-to-end smoke on Render/local automation flow (`fetch_bearer_token` -> `log_progress --dry-run` -> real submit) and capture one canonical task-name example for scripts.
+
 ## [2026-02-20]
 - Done: Added isolated ChessTempo integration under `backend/integrations/chesstempo` with Playwright CSV fetch, storage-state-first auth flow, and JSON per-day aggregation output.
 - Done: Added parser tests (`backend/tests/test_chesstempo_csv_parser.py`) for aggregation, skipped rows, column fallback, and Europe/Amsterdam day-boundary grouping.

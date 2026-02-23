@@ -6,7 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8-sig",
+        extra="ignore",
+    )
 
     chessdojo_base_url: str = Field(
         default="https://g4shdaq6ug.execute-api.us-east-1.amazonaws.com"

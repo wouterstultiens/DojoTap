@@ -1,4 +1,10 @@
 ## [2026-02-23]
+- Done: Pulled Render `dojotap-api` logs and traced login failure to Postgres FK violation (`browser_session.user_key` -> missing `user_auth_state` row) during `POST /api/auth/login`.
+- Done: Fixed backend login transaction ordering by flushing `UserAuthState` before inserting `BrowserSession` in `backend/app/auth.py`.
+- Done: Re-ran auth tests (`pytest backend/tests/test_auth.py`) and confirmed pass.
+- Next: Deploy `dojotap-api`, attempt login from the frontend, and verify Render logs no longer show `ForeignKeyViolationError`.
+
+## [2026-02-23]
 - Done: Replaced file/in-memory auth with DB-backed session auth (`HttpOnly` cookie) and encrypted refresh-token persistence (`AUTH_STATE_ENCRYPTION_KEY`) using SQLAlchemy async tables.
 - Done: Added bootstrap cache fallback path so slow/network bootstrap failures keep cached tasks visible in read-only mode instead of forcing logout.
 - Done: Added backend preferences API (`GET/PUT /api/preferences`) and wired frontend pin/task UI preference sync with version-based conflict handling and cross-device persistence.

@@ -176,6 +176,9 @@ class LocalAuthManager:
                     user_state.refresh_token_encrypted = self._token_cipher.encrypt(tokens.refresh_token)
                 else:
                     user_state.refresh_token_encrypted = None
+                # Ensure the parent auth row exists before inserting a session row
+                # that references it through the FK in Postgres.
+                await db.flush()
 
                 session_record = BrowserSession(
                     session_id=session_id,
